@@ -10,9 +10,11 @@ import { ValuationEngineTab } from "@/components/dashboard/tabs/valuation-engine
 import { MarketDynamicsTab } from "@/components/dashboard/tabs/market-dynamics"
 import { MarketInventoryTab } from "@/components/dashboard/tabs/market-inventory"
 import { PredictTab } from "@/components/dashboard/tabs/predict-tab"
+import { InvestmentCalculatorTab } from "@/components/dashboard/tabs/investment-calculator"
+import { CashFlowTab } from "@/components/dashboard/tabs/cash-flow"
 import {
   BarChart3, Settings2, Activity, Building2, PanelLeftOpen, Loader2,
-  Moon, Sun, Download, RotateCcw, Home,
+  Moon, Sun, Download, RotateCcw, Home, Calculator, TrendingUp,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { startTraining, waitForTrainingCompletion, simulateMarketScenario } from "@/src/api"
@@ -254,6 +256,12 @@ export default function App() {
               <TabsTrigger value="predict" className="gap-2 px-4 py-2.5 rounded-lg data-[state=active]:bg-foreground data-[state=active]:text-background data-[state=active]:shadow-sm transition-all">
                 <Home className="w-4 h-4" /> Predict
               </TabsTrigger>
+              <TabsTrigger value="investment-calculator" className="gap-2 px-4 py-2.5 rounded-lg data-[state=active]:bg-foreground data-[state=active]:text-background data-[state=active]:shadow-sm transition-all">
+                <Calculator className="w-4 h-4" /> Investment
+              </TabsTrigger>
+              <TabsTrigger value="cash-flow" className="gap-2 px-4 py-2.5 rounded-lg data-[state=active]:bg-foreground data-[state=active]:text-background data-[state=active]:shadow-sm transition-all">
+                <TrendingUp className="w-4 h-4" /> Cash Flow
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="model-stats" className="mt-0 animate-in fade-in-0 slide-in-from-bottom-4 duration-300">
@@ -278,6 +286,18 @@ export default function App() {
               {result && jobId
                 ? <PredictTab jobId={jobId} result={result} />
                 : <LockedState icon={<Home className="w-6 h-6" />} label="Single-Property Prediction" />}
+            </TabsContent>
+
+            <TabsContent value="investment-calculator" className="mt-0 animate-in fade-in-0 slide-in-from-bottom-4 duration-300">
+              {result
+                ? <InvestmentCalculatorTab result={result} />
+                : <LockedState icon={<Calculator className="w-6 h-6" />} label="Investment Calculator" />}
+            </TabsContent>
+
+            <TabsContent value="cash-flow" className="mt-0 animate-in fade-in-0 slide-in-from-bottom-4 duration-300">
+              {result
+                ? <CashFlowTab result={result} />
+                : <LockedState icon={<TrendingUp className="w-6 h-6" />} label="Cash Flow & Returns" />}
             </TabsContent>
           </Tabs>
         </div>
