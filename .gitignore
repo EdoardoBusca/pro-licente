@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.env
+
+# Data & Models
+backend/models/*
+!backend/models/.gitkeep
+*.csv
+*.xlsx
+
+# SQLite databases
+*.db
+*.db-shm
+*.db-wal
+
+# IDEs
+.idea/
+.vscode/
+
+# Node / React
+node_modules/
+dist/
