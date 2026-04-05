@@ -37,23 +37,91 @@ load_dotenv()
 
 # ─── Gemini Setup ──────────────────────────────────────────────────────────────
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-_gemini_model = None
+_gemini_client = None
 
-def _get_gemini():
-    global _gemini_model
+def _get_client():
+    """Return a shared google-genai Client, or None if no API key."""
+    global _gemini_client
     if not GEMINI_API_KEY:
         return None
-    if _gemini_model is None:
+    if _gemini_client is None:
         try:
-            import google.generativeai as genai
-            genai.configure(api_key=GEMINI_API_KEY)
-            _gemini_model = genai.GenerativeModel(
-                "gemini-1.5-flash",
-                generation_config={"temperature": 0.1, "response_mime_type": "application/json"},
-            )
+            from google import genai
+            _gemini_client = genai.Client(api_key=GEMINI_API_KEY)
         except Exception:
             return None
-    return _gemini_model
+    return _gemini_client
+
+# Keep for backwards compat with map-columns endpoint
+def _get_gemini(): return _get_client()
+
+
+def _gemini_json(prompt: str) -> str:
+    """Call Gemini and return raw text (expected to be JSON)."""
+    client = _get_client()
+    if not client:
+        raise RuntimeError("Gemini API key not configured.")
+    from google import genai as _genai
+    response = client.models.generate_content(
+        model="gemini-2.0-flash-lite",
+        contents=prompt,
+        config=_genai.types.GenerateContentConfig(
+            temperature=0.1,
+            response_mime_type="application/json",
+        ),
+    )
+    return response.text.strip()
+
+
+def _gemini_text(prompt: str) -> str:
+    """Call Gemini and return plain text."""
+    client = _get_client()
+    if not client:
+        raise RuntimeError("Gemini API key not configured.")
+    from google import genai as _genai
+    response = client.models.generate_content(
+        model="gemini-2.0-flash-lite",
+        contents=prompt,
+        config=_genai.types.GenerateContentConfig(temperature=0.4),
+    )
+    return response.text.strip()
+
+
+def explain_shap_features(shap_features: list[dict]) -> str:
+    """
+    Turn top SHAP features into a human-friendly paragraph for a home buyer.
+
+    shap_features: list of dicts with keys 'feature' and 'value' (dollar impact).
+    Example: [{"feature": "Location", "value": 50000},
+              {"feature": "Year Built", "value": -10000},
+              {"feature": "Sq Ft Total", "value": 25000}]
+
+    Returns a plain-English explanation string.
+    """
+    if not shap_features:
+        return "No feature data available to explain this valuation."
+
+    lines = []
+    for f in shap_features[:3]:
+        name  = f.get("feature", "Unknown")
+        val   = f.get("value", 0)
+        sign  = "+" if val >= 0 else ""
+        lines.append(f"  - {name}: {sign}${val:,.0f} impact on price")
+    features_text = "\n".join(lines)
+
+    prompt = f"""You are a friendly real estate advisor explaining an AI price prediction to a home buyer.
+The AI analysed this property and identified the top 3 factors driving its price:
+
+{features_text}
+
+Write a single, clear paragraph (2-4 sentences) in plain English that:
+1. Explains which factors are pushing the price up and which are pulling it down
+2. Uses natural language a non-expert can understand (no jargon)
+3. Ends with one practical takeaway for the buyer
+
+Do not use bullet points. Do not repeat the raw numbers — translate them into meaning."""
+
+    return _gemini_text(prompt)
 
 app = FastAPI()
 
@@ -540,6 +608,21 @@ async def predict_single(job_id: str, payload: PredictRequest):
     return {"predicted_price": round(prediction, 2)}
 
 
+# ─── Gemini Health Check ───────────────────────────────────────────────────────
+
+@app.get("/test-gemini")
+async def test_gemini():
+    """Quick endpoint to verify Gemini is reachable. Visit http://localhost:8000/test-gemini in browser."""
+    if not GEMINI_API_KEY:
+        return {"status": "error", "message": "GEMINI_API_KEY is empty — check backend/.env"}
+    try:
+        result = _gemini_text("Reply with exactly: OK")
+        return {"status": "ok", "response": result, "key_prefix": GEMINI_API_KEY[:8] + "..."}
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return {"status": "error", "message": str(e)}
+
+
 # ─── AI Column Mapping ─────────────────────────────────────────────────────────
 
 @app.post("/map-columns")
@@ -609,8 +692,7 @@ Respond ONLY with valid JSON (no markdown fences):
 
 Supported transforms: null, "sqm_to_sqft", "sqft_to_sqm", "sqyd_to_sqft", "derive_condition_from_furnishing", "use_as_closing"
 """
-        response = gemini.generate_content(prompt)
-        raw = response.text.strip()
+        raw = _gemini_json(prompt)
         # Strip markdown fences if model ignores mime_type instruction
         raw = re.sub(r"^```(?:json)?\s*", "", raw)
         raw = re.sub(r"\s*```$", "", raw)
@@ -620,6 +702,7 @@ Supported transforms: null, "sqm_to_sqft", "sqft_to_sqm", "sqyd_to_sqft", "deriv
     except json.JSONDecodeError as e:
         return JSONResponse(status_code=500, content={"error": f"Gemini returned invalid JSON: {e}"})
     except Exception as e:
+        import traceback; traceback.print_exc()
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 
@@ -648,12 +731,6 @@ class AiAdviceRequest(BaseModel):
 @app.post("/ai-advice")
 async def ai_advice(payload: AiAdviceRequest):
     """Generate custom investment advice from Gemini based on training results."""
-    gemini = _get_gemini()
-    if not gemini:
-        return JSONResponse(
-            status_code=503,
-            content={"error": "Gemini API key not configured. Add GEMINI_API_KEY to backend/.env"},
-        )
     try:
         locs = ", ".join(str(l) for l in payload.locations[:8]) or "N/A"
         types = ", ".join(str(t) for t in payload.property_types[:6]) or "N/A"
@@ -682,12 +759,9 @@ Write exactly 4 investment insights. Each must:
 
 Format: Use headers like "## 1. [Title]" for each insight. Keep total under 380 words. Be direct — no filler phrases."""
 
-        import google.generativeai as genai
-        advice_model = genai.GenerativeModel(
-            "gemini-1.5-flash",
-            generation_config={"temperature": 0.4},
-        )
-        response = advice_model.generate_content(prompt)
-        return {"advice": response.text.strip()}
+        if not _get_client():
+            return JSONResponse(status_code=503, content={"error": "Gemini API key not configured."})
+        return {"advice": _gemini_text(prompt)}
     except Exception as e:
+        import traceback; traceback.print_exc()
         return JSONResponse(status_code=500, content={"error": str(e)})

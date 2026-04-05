@@ -19,6 +19,7 @@ if errorlevel 1 (
 echo  Installing / verifying dependencies...
 echo  (this can take a few minutes the first time - you will see progress below)
 echo.
+pip uninstall google-generativeai
 pip install --no-cache-dir -r requirements.txt
 
 echo.

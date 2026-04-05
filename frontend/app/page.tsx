@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { Hero } from "@/components/landing/hero"
 import { LoadingTransition } from "@/components/landing/loading-transition"
 import { Sidebar } from "@/components/dashboard/sidebar"
@@ -26,22 +26,19 @@ import type { ConfirmedMapping } from "@/components/dashboard/column-mapper"
 type AppState = "landing" | "loading" | "dashboard"
 
 export default function App() {
-  const [appState,  setAppState]  = useState<AppState>(() =>
-    typeof window !== "undefined" && sessionStorage.getItem("ev-result") ? "dashboard" : "landing"
-  )
+  // Always start with safe server-side defaults — load from storage after mount
+  const [appState,  setAppState]  = useState<AppState>("landing")
   const [activeTab, setActiveTab] = useState("model-stats")
   const [sidebarOpen, setSidebarOpen] = useState(true)
 
-  // Training state — restore last session from sessionStorage
-  const [file,     setFile]     = useState<File | null>(null)
-  const [target,   setTarget]   = useState("Closing_Price")
-  const [horizon,  setHorizon]  = useState("180")
+  // Training state
+  const [file,       setFile]       = useState<File | null>(null)
+  const [target,     setTarget]     = useState("Closing_Price")
+  const [horizon,    setHorizon]    = useState("180")
   const [isTraining, setIsTraining] = useState(false)
-  const [result,   setResult]   = useState<TrainingResult | null>(() => {
-    try { const s = sessionStorage.getItem("ev-result"); return s ? JSON.parse(s) : null } catch { return null }
-  })
-  const [error,    setError]    = useState<string | null>(null)
-  const [jobId,    setJobId]    = useState<string | null>(() => typeof window !== "undefined" ? sessionStorage.getItem("ev-job-id") : null)
+  const [result,     setResult]     = useState<TrainingResult | null>(null)
+  const [error,      setError]      = useState<string | null>(null)
+  const [jobId,      setJobId]      = useState<string | null>(null)
   const [pollProgress, setPollProgress] = useState<{ attempt: number; max: number } | null>(null)
 
   // Column mapping state
@@ -55,19 +52,29 @@ export default function App() {
   const [isAdviceLoading, setIsAdviceLoading] = useState(false)
   const [adviceError,     setAdviceError]     = useState<string | null>(null)
 
-  // Theme — persist across reloads
-  const [isDark, setIsDark] = useState(() => {
-    if (typeof window === "undefined") return false
-    const saved = localStorage.getItem("ev-dark")
-    if (saved !== null) return saved === "1"
-    return window.matchMedia("(prefers-color-scheme: dark)").matches
-  })
+  // Theme — always false on server, real value loaded after mount
+  const [isDark, setIsDark] = useState(false)
 
-  // Apply theme class on first render
-  useState(() => {
-    if (typeof window !== "undefined")
-      document.documentElement.classList.toggle("dark", isDark)
-  })
+  // Restore persisted session after mount (client-only)
+  useEffect(() => {
+    try {
+      const savedResult = sessionStorage.getItem("ev-result")
+      const savedJobId  = sessionStorage.getItem("ev-job-id")
+      if (savedResult) {
+        setResult(JSON.parse(savedResult))
+        setAppState("dashboard")
+      }
+      if (savedJobId) setJobId(savedJobId)
+    } catch { /* ignore */ }
+
+    // Theme
+    const savedDark = localStorage.getItem("ev-dark")
+    const prefersDark = savedDark !== null
+      ? savedDark === "1"
+      : window.matchMedia("(prefers-color-scheme: dark)").matches
+    setIsDark(prefersDark)
+    document.documentElement.classList.toggle("dark", prefersDark)
+  }, [])
 
   const handleToggleDark = useCallback(() => {
     setIsDark((prev) => {
