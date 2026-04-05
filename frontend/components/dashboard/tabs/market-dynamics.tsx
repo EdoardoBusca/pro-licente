@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { TrendingUp, Activity, Info, Zap, Target } from "lucide-react"
 import type { TrainingResult } from "@/src/types"
+import { getMarketIntelligence } from "@/src/api"
 
 type RenovationPackage = "basic" | "midrange" | "luxury" | "structural"
 
@@ -44,6 +45,13 @@ interface MarketData {
   }
 }
 
+interface AiSignal {
+  name: string
+  lag_days: number
+  correlation: number
+  description: string
+}
+
 const ROI_ICONS = [Zap, Target, TrendingUp, Activity] as const
 const FACTOR_NAMES = ["Demand Momentum", "Liquidity Pulse", "Pricing Drift"]
 
@@ -79,6 +87,7 @@ function useMarketDynamics(result: TrainingResult): MarketData {
     const baseValuation = Number(
       result.market_dynamics?.price_discovery?.find((d) => d.kind === "final")?.change
       ?? result.projection?.[result.projection.length - 1]?.val
+      ?? result.avg_price
       ?? 0,
     )
 
@@ -86,7 +95,7 @@ function useMarketDynamics(result: TrainingResult): MarketData {
       || `Market cycle: ${result.market_dynamics?.temporal_analysis?.market_cycle ?? "Balanced"}. AI confidence remains ${Math.round(result.composite_confidence_score ?? 0)}%.`
 
     const liquidity = {
-      score: Math.round(Number(result.market_dynamics?.sales_velocity?.liquidity_score ?? 0)),
+      score: Math.min(99, Math.max(1, Math.round(Number(result.market_dynamics?.sales_velocity?.liquidity_score ?? 0)))),
       expectedDaysToSell: result.market_dynamics?.sales_velocity?.expected_days_to_sell ?? null,
       marketLabel: result.market_dynamics?.sales_velocity?.market_label || "Market liquidity signal",
     }
@@ -112,6 +121,28 @@ export function MarketDynamicsTab({ result, onSliderChange }: MarketDynamicsTabP
   const [expectedValueGain, setExpectedValueGain] = useState(market.baseValuation * RENOVATION_PACKAGES.basic.gainPct)
   const [projectedProfit, setProjectedProfit] = useState((market.baseValuation * RENOVATION_PACKAGES.basic.gainPct) - RENOVATION_PACKAGES.basic.cost)
   const [isSimulating, setIsSimulating] = useState(false)
+  const [aiSignals, setAiSignals] = useState<AiSignal[]>([])
+  const [signalsLoading, setSignalsLoading] = useState(false)
+
+  useEffect(() => {
+    setSignalsLoading(true)
+    const md = result.market_dynamics
+    getMarketIntelligence({
+      market_cycle: md?.temporal_analysis?.market_cycle ?? "Balanced",
+      yoy_appreciation: Number(md?.temporal_analysis?.yoy_appreciation ?? 0),
+      liquidity_score: Number(md?.sales_velocity?.liquidity_score ?? 0),
+      avg_price: Number(result.avg_price ?? 0),
+      locations: result.top_zip_codes ?? [],
+      property_types: result.property_type_distribution ? Object.keys(result.property_type_distribution) : [],
+      total_rows: Number(result.total_rows ?? 0),
+      expected_days_to_sell: md?.sales_velocity?.expected_days_to_sell ?? null,
+      mape: Number(result.mape ?? 0),
+      r2: Number(result.r2 ?? 0),
+    })
+      .then((data: { signals?: AiSignal[] }) => { if (data?.signals) setAiSignals(data.signals) })
+      .catch(() => {})
+      .finally(() => setSignalsLoading(false))
+  }, [result])
 
   useEffect(() => {
     setAdjustedValuation(market.baseValuation)
@@ -217,29 +248,42 @@ export function MarketDynamicsTab({ result, onSliderChange }: MarketDynamicsTabP
         <div className="flex items-center gap-2 mb-5">
           <Activity className="w-5 h-5 text-[#334155]" />
           <h3 className="text-lg font-semibold text-[#0F172A]">Lead-Lag Market Intelligence</h3>
+          <span className="ml-auto text-xs text-[#94A3B8] flex items-center gap-1">AI-generated</span>
         </div>
         <div className="space-y-4">
-          {market.macroFactors.length > 0 ? market.macroFactors.map((factor) => {
-            const strength = Math.min(100, Math.round(Math.abs(factor.correlation) * 100))
+          {signalsLoading ? (
+            <div className="space-y-3">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="rounded-lg border border-gray-100 bg-[#FAFCFF] p-4 animate-pulse">
+                  <div className="h-4 bg-gray-200 rounded w-1/3 mb-2" />
+                  <div className="h-3 bg-gray-100 rounded w-2/3 mb-3" />
+                  <div className="h-2.5 bg-gray-200 rounded-full w-full" />
+                </div>
+              ))}
+            </div>
+          ) : aiSignals.length > 0 ? aiSignals.map((signal, i) => {
+            const strength = Math.min(100, Math.round(signal.correlation * 100))
             return (
-              <div key={factor.id} className="grid grid-cols-1 md:grid-cols-[1fr_240px] gap-4 items-center rounded-lg border border-gray-100 bg-[#FAFCFF] p-4">
+              <div key={i} className="grid grid-cols-1 md:grid-cols-[1fr_240px] gap-4 items-center rounded-lg border border-gray-100 bg-[#FAFCFF] p-4">
                 <div>
-                  <p className="text-base font-semibold text-[#0F172A]">{factor.name}</p>
+                  <p className="text-base font-semibold text-[#0F172A]">{signal.name}</p>
                   <p className="text-sm text-[#64748B] mt-1">
-                    Lag: <span className="font-medium text-[#334155]">{factor.lagDays} days</span>
+                    Lag: <span className="font-medium text-[#334155]">{signal.lag_days} days</span>
                     <span className="mx-2">•</span>
-                    Correlation: <span className="font-medium text-[#334155]">{factor.correlation.toFixed(2)}</span>
+                    Correlation: <span className="font-medium text-[#334155]">{signal.correlation.toFixed(2)}</span>
                   </p>
+                  <p className="text-xs text-[#94A3B8] mt-1.5">{signal.description}</p>
                 </div>
                 <div className="justify-self-end w-full max-w-[240px]">
                   <div className="h-2.5 w-full rounded-full bg-[#E2E8F0] overflow-hidden">
                     <div className="h-full rounded-full bg-[#334155]" style={{ width: `${strength}%` }} />
                   </div>
+                  <p className="text-xs text-[#94A3B8] mt-1 text-right">{strength}% signal strength</p>
                 </div>
               </div>
             )
           }) : (
-            <div className="rounded-lg border border-gray-100 p-4 text-base text-[#64748B]">No macro factor data available.</div>
+            <div className="rounded-lg border border-gray-100 p-4 text-base text-[#64748B]">No signal data available.</div>
           )}
         </div>
       </section>

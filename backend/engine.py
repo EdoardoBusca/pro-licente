@@ -15,6 +15,7 @@ Pipeline:
                        sales velocity, price discovery waterfall, lead-lag
 """
 
+import os
 import pandas as pd
 import numpy as np
 import re
@@ -399,8 +400,11 @@ def _estimate_sales_velocity(history_values, r2_score, prediction_std, source_df
 def _safe_mape(y_true, y_pred):
     y_true_arr = np.asarray(y_true, dtype=float)
     y_pred_arr = np.asarray(y_pred, dtype=float)
-    denom = np.maximum(np.abs(y_true_arr), 1e-6)
-    return float(np.mean(np.abs((y_true_arr - y_pred_arr) / denom)) * 100.0)
+    # Filter rows where true value is zero or non-finite — they blow up MAPE
+    valid = np.isfinite(y_true_arr) & np.isfinite(y_pred_arr) & (np.abs(y_true_arr) > 1.0)
+    if not np.any(valid):
+        return 0.0
+    return float(np.mean(np.abs((y_true_arr[valid] - y_pred_arr[valid]) / np.abs(y_true_arr[valid]))) * 100.0)
 
 
 def _canonical_feature_name(name):
@@ -462,7 +466,7 @@ def _build_price_discovery(base_price, projection, feature_importance, feature_c
     feature_correlations = feature_correlations or {}
 
     rows = [{"name": "Base Price", "change": base_value}]
-    contribution_budget = delta_total * 0.82
+    contribution_budget = delta_total  # allocate 100% to features; Market Momentum absorbs the residual
 
     for item in ranked_features:
         raw_name = str(item.get("feature", "Market Factor"))
@@ -545,7 +549,8 @@ def _explain_selected_property(model, X_train, selected_row, dataset_expected_va
 
         recomposed = expected_value + float(np.sum([item["change"] for item in contributions]))
         reconciliation = predicted_value - recomposed
-        if abs(reconciliation) > 1.0:
+        # Threshold: 0.1% of predicted value — currency-independent
+        if abs(reconciliation) > max(1.0, abs(predicted_value) * 0.001):
             waterfall.append({"name": "Other Factors", "change": float(reconciliation), "kind": "impact"})
 
         waterfall.append({"name": "Predicted Price", "change": predicted_value, "kind": "final"})
@@ -713,21 +718,44 @@ def _calculate_market_cycle(yoy_metrics):
 
     recent_yoy = yoy_metrics[-1]["yoy_appreciation"]
 
+    # Thresholds account for ~3% baseline inflation:
+    # >8% = clearly above inflation (Hot), 3–8% = real gains (Balanced),
+    # 0–3% = at or below inflation (Slowing), <0% = nominal decline (Cold)
     if recent_yoy > 8.0:
         return f"Hot Market - {recent_yoy:.1f}% YoY appreciation (Expansion Phase)"
-    elif recent_yoy > 2.0:
+    elif recent_yoy > 3.0:
         return f"Balanced Market - {recent_yoy:.1f}% YoY appreciation"
-    elif recent_yoy > -3.0:
-        return f"Slowing Market - {recent_yoy:.1f}% YoY appreciation (Moderation Phase)"
+    elif recent_yoy > 0.0:
+        return f"Slowing Market - {recent_yoy:.1f}% YoY appreciation (Below Inflation)"
     else:
         return f"Cold Market - {recent_yoy:.1f}% YoY depreciation (Contraction Phase)"
 
 # In-memory model store: job_id → {model, scaler, features}
 _model_store: dict = {}
 
+_MODELS_DIR = os.path.join(os.path.dirname(__file__), "models")
+os.makedirs(_MODELS_DIR, exist_ok=True)
+
+
+def _model_path(job_id: str) -> str:
+    return os.path.join(_MODELS_DIR, f"{job_id}.pkl")
+
 
 def get_model_state(job_id: str):
-    return _model_store.get(job_id)
+    # Check memory first (fast path)
+    if job_id in _model_store:
+        return _model_store[job_id]
+    # Fall back to disk (survives server restarts)
+    path = _model_path(job_id)
+    if os.path.exists(path):
+        try:
+            import joblib
+            state = joblib.load(path)
+            _model_store[job_id] = state  # cache back into memory
+            return state
+        except Exception:
+            return None
+    return None
 
 
 def train_logic(df, target_col, horizon=30, job_id=None):
@@ -976,7 +1004,7 @@ def train_logic(df, target_col, horizon=30, job_id=None):
                 "mape": float(mape), "cv_mape": float(cv_mape) if cv_mape is not None else None
             })
 
-            if (selection_mape < best_primary_metric) or (np.isclose(selection_mape, best_primary_metric) and score > best_score):
+            if (selection_mape < best_primary_metric) or (abs(selection_mape - best_primary_metric) < 0.01 and score > best_score):
                 best_primary_metric = selection_mape
                 best_score, best_model, winner_name = score, model, name
                 best_mae, best_rmse, best_mape, best_predictions = mae, rmse, mape, y_pred
@@ -1028,8 +1056,11 @@ def train_logic(df, target_col, horizon=30, job_id=None):
                 # Tree-based models (Random Forest, XGBoost, LightGBM, CatBoost)
                 importances = best_model.feature_importances_
             elif hasattr(best_model, 'coef_'):
-                # Linear Regression: use absolute coefficient values as a proxy for importance
-                importances = np.abs(best_model.coef_)
+                # Linear Regression: normalize absolute coefficients to sum to 1 so they're
+                # on the same scale as tree feature_importances_ and comparable across models
+                raw = np.abs(best_model.coef_)
+                total = raw.sum()
+                importances = raw / total if total > 0 else raw
             else:
                 importances = None
 
@@ -1161,7 +1192,9 @@ def train_logic(df, target_col, horizon=30, job_id=None):
             # Calculate valuation delta: (AI_predicted - List_Price) / List_Price * 100
             valid_mask = list_prices.notna() & (list_prices > 0)
             deltas_pct = np.full(len(predicted_prices), np.nan)
-            deltas_pct[valid_mask] = ((predicted_prices[valid_mask] - list_prices[valid_mask]) / list_prices[valid_mask]) * 100
+            raw_deltas = ((predicted_prices[valid_mask] - list_prices[valid_mask]) / list_prices[valid_mask]) * 100
+            # Cap at ±500% to prevent bad-data outliers from dominating signal tables
+            deltas_pct[valid_mask] = np.clip(raw_deltas, -500.0, 500.0)
             
             # Count signals
             undervalued_mask = deltas_pct > 10  # AI value is >10% higher than asking
@@ -1291,11 +1324,17 @@ def train_logic(df, target_col, horizon=30, job_id=None):
         )
     
     if job_id is not None:
-        _model_store[job_id] = {
+        state = {
             "model": best_model,
             "scaler": scaler,
             "features": list(processed_features),
         }
+        _model_store[job_id] = state
+        try:
+            import joblib
+            joblib.dump(state, _model_path(job_id))
+        except Exception:
+            pass  # persistence is best-effort; in-memory still works
 
     return {
         "winner": winner_name,

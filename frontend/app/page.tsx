@@ -16,10 +16,11 @@ import { ColumnMapper } from "@/components/dashboard/column-mapper"
 import { AiAdvicePanel } from "@/components/dashboard/ai-advice-panel"
 import {
   BarChart3, Settings2, Activity, Building2, PanelLeftOpen, Loader2,
-  Moon, Sun, Download, RotateCcw, Home, Calculator, TrendingUp,
+  Moon, Sun, Download, RotateCcw, Home, Calculator, TrendingUp, FileText,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { startTraining, waitForTrainingCompletion, simulateMarketScenario, mapColumns, getAiAdvice } from "@/src/api"
+import { startTraining, waitForTrainingCompletion, simulateMarketScenario, mapColumns, getAiAdvice, logout, getStoredUser } from "@/src/api"
+import { downloadPDF } from "@/components/dashboard/report-pdf"
 import type { TrainingResult, ColumnMappingResult } from "@/src/types"
 import type { ConfirmedMapping } from "@/components/dashboard/column-mapper"
 
@@ -52,11 +53,21 @@ export default function App() {
   const [isAdviceLoading, setIsAdviceLoading] = useState(false)
   const [adviceError,     setAdviceError]     = useState<string | null>(null)
 
+  // PDF export state
+  const [isPdfLoading, setIsPdfLoading] = useState(false)
+
   // Theme — always false on server, real value loaded after mount
   const [isDark, setIsDark] = useState(false)
 
   // Restore persisted session after mount (client-only)
   useEffect(() => {
+    // Auth guard — redirect to login if no token
+    const token = localStorage.getItem("ev-token")
+    if (!token) {
+      window.location.href = "/login"
+      return
+    }
+
     try {
       const savedResult = sessionStorage.getItem("ev-result")
       const savedJobId  = sessionStorage.getItem("ev-job-id")
@@ -255,6 +266,8 @@ export default function App() {
           onInitialize={handleInitialize}
           onReviewMapping={() => setShowMapper(true)}
           onCollapse={() => setSidebarOpen(false)}
+          currentUser={getStoredUser()}
+          onLogout={logout}
         />
       </div>
 
@@ -280,6 +293,21 @@ export default function App() {
               className="h-9 w-9 rounded-xl border-border hover:bg-muted">
               {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </Button>
+
+            {/* Export PDF */}
+            {result && (
+              <Button variant="outline" size="sm"
+                onClick={async () => {
+                  setIsPdfLoading(true)
+                  try { await downloadPDF(result, aiAdvice) }
+                  finally { setIsPdfLoading(false) }
+                }}
+                disabled={isPdfLoading}
+                className="gap-2 rounded-xl border-border hover:bg-muted">
+                {isPdfLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+                {isPdfLoading ? "Generating…" : "Export PDF"}
+              </Button>
+            )}
 
             {/* Export JSON */}
             {result && (

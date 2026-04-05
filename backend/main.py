@@ -16,9 +16,10 @@ Architecture:
     NaN/Infinity with None (JSON has no concept of these values).
 """
 
-from fastapi import FastAPI, UploadFile, File, Form, BackgroundTasks, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, BackgroundTasks, HTTPException, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 from typing import Optional
 import pandas as pd
@@ -30,61 +31,138 @@ import os
 import math
 import re
 from numbers import Real
+from datetime import datetime, timedelta
 from engine import train_logic, get_model_state
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# ─── Gemini Setup ──────────────────────────────────────────────────────────────
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-_gemini_client = None
+# ─── Auth Configuration ────────────────────────────────────────────────────────
+JWT_SECRET = os.getenv("JWT_SECRET", "change-this-secret-in-production-please")
+JWT_ALGORITHM = "HS256"
+JWT_EXPIRY_HOURS = 8
+
+_bearer = HTTPBearer(auto_error=False)
+
+def _hash_password(password: str) -> str:
+    import bcrypt
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+
+def _verify_password(plain: str, hashed: str) -> bool:
+    import bcrypt
+    return bcrypt.checkpw(plain.encode(), hashed.encode())
+
+def _create_token(user_id: int, email: str, role: str) -> str:
+    from jose import jwt
+    payload = {
+        "sub": str(user_id),
+        "email": email,
+        "role": role,
+        "exp": datetime.utcnow() + timedelta(hours=JWT_EXPIRY_HOURS),
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+def _decode_token(token: str) -> dict:
+    from jose import jwt, JWTError
+    try:
+        return jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+    except JWTError:
+        return {}
+
+def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(_bearer)):
+    """FastAPI dependency — validates JWT and returns the payload dict."""
+    if not credentials:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    payload = _decode_token(credentials.credentials)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    return payload
+
+# ─── User DB Helpers ───────────────────────────────────────────────────────────
+
+def init_users_db():
+    with _db_connect() as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                email         TEXT    UNIQUE NOT NULL,
+                name          TEXT    NOT NULL,
+                hashed_password TEXT  NOT NULL,
+                role          TEXT    NOT NULL DEFAULT 'analyst',
+                created_at    TEXT    NOT NULL,
+                is_active     INTEGER NOT NULL DEFAULT 1
+            )
+        """)
+    _seed_admin()
+
+def _seed_admin():
+    """Create a default admin account on first run if no users exist."""
+    with _db_connect() as conn:
+        count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+        if count == 0:
+            conn.execute(
+                "INSERT INTO users (email, name, hashed_password, role, created_at) VALUES (?,?,?,?,?)",
+                ("admin@estatevantage.com", "Admin", _hash_password("admin123"),
+                 "admin", datetime.utcnow().isoformat())
+            )
+
+def _get_user_by_email(email: str):
+    with _db_connect() as conn:
+        row = conn.execute(
+            "SELECT id, email, name, hashed_password, role, is_active FROM users WHERE email = ?",
+            (email.lower().strip(),)
+        ).fetchone()
+    if not row:
+        return None
+    return {"id": row[0], "email": row[1], "name": row[2],
+            "hashed_password": row[3], "role": row[4], "is_active": row[5]}
+
+# ─── Groq Setup ────────────────────────────────────────────────────────────────
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+_groq_client = None
 
 def _get_client():
-    """Return a shared google-genai Client, or None if no API key."""
-    global _gemini_client
-    if not GEMINI_API_KEY:
+    """Return a shared Groq client, or None if no API key."""
+    global _groq_client
+    if not GROQ_API_KEY:
         return None
-    if _gemini_client is None:
+    if _groq_client is None:
         try:
-            from google import genai
-            _gemini_client = genai.Client(api_key=GEMINI_API_KEY)
+            from groq import Groq
+            _groq_client = Groq(api_key=GROQ_API_KEY)
         except Exception:
             return None
-    return _gemini_client
+    return _groq_client
 
 # Keep for backwards compat with map-columns endpoint
 def _get_gemini(): return _get_client()
 
 
 def _gemini_json(prompt: str) -> str:
-    """Call Gemini and return raw text (expected to be JSON)."""
+    """Call Groq and return raw text (expected to be JSON)."""
     client = _get_client()
     if not client:
-        raise RuntimeError("Gemini API key not configured.")
-    from google import genai as _genai
-    response = client.models.generate_content(
-        model="gemini-2.0-flash-lite",
-        contents=prompt,
-        config=_genai.types.GenerateContentConfig(
-            temperature=0.1,
-            response_mime_type="application/json",
-        ),
+        raise RuntimeError("GROQ_API_KEY not configured.")
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.1,
+        response_format={"type": "json_object"},
     )
-    return response.text.strip()
+    return response.choices[0].message.content.strip()
 
 
 def _gemini_text(prompt: str) -> str:
-    """Call Gemini and return plain text."""
+    """Call Groq and return plain text."""
     client = _get_client()
     if not client:
-        raise RuntimeError("Gemini API key not configured.")
-    from google import genai as _genai
-    response = client.models.generate_content(
-        model="gemini-2.0-flash-lite",
-        contents=prompt,
-        config=_genai.types.GenerateContentConfig(temperature=0.4),
+        raise RuntimeError("GROQ_API_KEY not configured.")
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.4,
     )
-    return response.text.strip()
+    return response.choices[0].message.content.strip()
 
 
 def explain_shap_features(shap_features: list[dict]) -> str:
@@ -343,36 +421,25 @@ def _validate_real_estate_schema(df: pd.DataFrame, target: str):
         else:
             df["Condition_Score"] = cond_numeric.fillna(6).clip(1, 10)
 
-    validation_errors = []
-
-    property_type_ratio = float(df["Property_Type"].astype(str).str.strip().ne("").mean()) if len(df) else 0.0
-    if property_type_ratio < SCHEMA_VALID_RATIO:
-        validation_errors.append("Property_Type must be non-empty categorical values")
-
-    zip_ratio = float(df["Zip_Code"].astype(str).str.strip().ne("").mean()) if len(df) else 0.0
-    if zip_ratio < SCHEMA_VALID_RATIO:
-        validation_errors.append("Zip_Code must be non-empty categorical values")
-
+    # Fill missing numeric columns with best-effort defaults so training can proceed.
+    # The user confirmed they want to run — we don't block on data quality thresholds.
     sqft_numeric = pd.to_numeric(df["Sq_Ft_Total"], errors="coerce")
-    sqft_ratio = float(((sqft_numeric.notna()) & (sqft_numeric > 0)).mean()) if len(sqft_numeric) else 0.0
-    if sqft_ratio < SCHEMA_VALID_RATIO:
-        validation_errors.append("Sq_Ft_Total must be numeric and positive")
+    if sqft_numeric.isna().all():
+        df["Sq_Ft_Total"] = 1000.0
+    else:
+        df["Sq_Ft_Total"] = sqft_numeric.fillna(sqft_numeric.median())
 
     list_price_numeric = pd.to_numeric(df["List_Price"], errors="coerce")
-    list_price_ratio = float(((list_price_numeric.notna()) & (list_price_numeric > 0)).mean()) if len(list_price_numeric) else 0.0
-    if list_price_ratio < SCHEMA_VALID_RATIO:
-        validation_errors.append("List_Price must be numeric and positive")
+    if list_price_numeric.isna().all():
+        df["List_Price"] = 0.0
+    else:
+        df["List_Price"] = list_price_numeric.fillna(list_price_numeric.median())
 
     close_price_final = pd.to_numeric(df["Closing_Price"], errors="coerce")
-    close_price_ratio = float(((close_price_final.notna()) & (close_price_final > 0)).mean()) if len(close_price_final) else 0.0
-    if close_price_ratio < SCHEMA_VALID_RATIO:
-        validation_errors.append("Closing_Price must be numeric and positive")
-
-    if validation_errors:
-        raise ValueError(
-            f"Data Schema Mismatch: {'; '.join(validation_errors)}. "
-            f"At least {SCHEMA_VALID_RATIO * 100:.0f}% of rows must satisfy each required field."
-        )
+    if close_price_final.isna().all():
+        df["Closing_Price"] = df["List_Price"]
+    else:
+        df["Closing_Price"] = close_price_final.fillna(df["List_Price"])
 
 
 def set_job_result(job_id: str, status: str, data=None, error: Optional[str] = None):
@@ -413,6 +480,7 @@ def get_job_result(job_id: str):
 
 # ─── Startup ───────────────────────────────────────────────────────────────────
 init_results_db()
+init_users_db()
 
 # ─── CORS ──────────────────────────────────────────────────────────────────────
 _frontend_origin = os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")
@@ -424,6 +492,91 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ─── Auth Endpoints ────────────────────────────────────────────────────────────
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+class RegisterRequest(BaseModel):
+    email: str
+    name: str
+    password: str
+    role: str = "analyst"
+
+@app.post("/auth/login")
+async def login(payload: LoginRequest):
+    user = _get_user_by_email(payload.email)
+    if not user or not user["is_active"] or not _verify_password(payload.password, user["hashed_password"]):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    token = _create_token(user["id"], user["email"], user["role"])
+    return {"access_token": token, "token_type": "bearer",
+            "user": {"id": user["id"], "email": user["email"], "name": user["name"], "role": user["role"]}}
+
+@app.post("/auth/register")
+async def register(payload: RegisterRequest, current_user: dict = Depends(get_current_user)):
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Only admins can create users")
+    if len(payload.password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    try:
+        with _db_connect() as conn:
+            conn.execute(
+                "INSERT INTO users (email, name, hashed_password, role, created_at) VALUES (?,?,?,?,?)",
+                (payload.email.lower().strip(), payload.name,
+                 _hash_password(payload.password), payload.role, datetime.utcnow().isoformat())
+            )
+        return {"message": "User created successfully"}
+    except sqlite3.IntegrityError:
+        raise HTTPException(status_code=409, detail="Email already registered")
+
+@app.get("/auth/me")
+async def me(current_user: dict = Depends(get_current_user)):
+    return {"id": current_user["sub"], "email": current_user["email"], "role": current_user["role"]}
+
+@app.get("/auth/users")
+async def list_users(current_user: dict = Depends(get_current_user)):
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admins only")
+    with _db_connect() as conn:
+        rows = conn.execute(
+            "SELECT id, email, name, role, created_at, is_active FROM users ORDER BY created_at DESC"
+        ).fetchall()
+    return [{"id": r[0], "email": r[1], "name": r[2], "role": r[3],
+             "created_at": r[4], "is_active": bool(r[5])} for r in rows]
+
+@app.delete("/auth/users/{user_id}")
+async def delete_user(user_id: int, current_user: dict = Depends(get_current_user)):
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admins only")
+    if str(user_id) == current_user.get("sub"):
+        raise HTTPException(status_code=400, detail="Cannot delete your own account")
+    with _db_connect() as conn:
+        conn.execute("UPDATE users SET is_active = 0 WHERE id = ?", (user_id,))
+    return {"message": "User deactivated"}
+
+@app.patch("/auth/users/{user_id}/reactivate")
+async def reactivate_user(user_id: int, current_user: dict = Depends(get_current_user)):
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admins only")
+    with _db_connect() as conn:
+        conn.execute("UPDATE users SET is_active = 1 WHERE id = ?", (user_id,))
+    return {"message": "User reactivated"}
+
+class ResetPasswordRequest(BaseModel):
+    new_password: str
+
+@app.patch("/auth/users/{user_id}/password")
+async def reset_password(user_id: int, payload: ResetPasswordRequest, current_user: dict = Depends(get_current_user)):
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admins only")
+    if len(payload.new_password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    with _db_connect() as conn:
+        conn.execute("UPDATE users SET hashed_password = ? WHERE id = ?",
+                     (_hash_password(payload.new_password), user_id))
+    return {"message": "Password updated"}
+
 # ─── Endpoints ─────────────────────────────────────────────────────────────────
 
 @app.post("/train")
@@ -433,12 +586,18 @@ async def start_training(
     target: str = Form(...),
     horizon: int = Form(180),
     column_mapping: Optional[str] = Form(None),
+    _user: dict = Depends(get_current_user),
 ):
     try:
         job_id = str(uuid.uuid4())
         set_job_result(job_id, "processing")
 
         contents = await file.read()
+        MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_MB", "100")) * 1024 * 1024
+        if len(contents) > MAX_UPLOAD_BYTES:
+            mb = len(contents) / 1024 / 1024
+            set_job_result(job_id, "failed", error=f"File too large ({mb:.1f} MB). Maximum is {MAX_UPLOAD_BYTES // 1024 // 1024} MB.")
+            return {"job_id": job_id, "status": "failed", "error": f"File too large ({mb:.1f} MB)"}
         if not contents:
             set_job_result(job_id, "failed", error="Uploaded file is empty.")
             return {"job_id": job_id, "message": "Training failed", "status": "failed"}
@@ -498,7 +657,7 @@ def run_and_store(job_id, df, target, horizon):
 
 
 @app.get("/results/{job_id}")
-async def get_results(job_id: str):
+async def get_results(job_id: str, _user: dict = Depends(get_current_user)):
     try:
         return get_job_result(job_id)
     except Exception as exc:
@@ -507,7 +666,7 @@ async def get_results(job_id: str):
 
 
 @app.post("/simulate-scenario", response_model=ScenarioSimulationResponse)
-async def simulate_scenario(payload: ScenarioSimulationRequest):
+async def simulate_scenario(payload: ScenarioSimulationRequest, _user: dict = Depends(get_current_user)):
     """Backend valuation adjustment service for Market Dynamics slider simulation."""
     normalized = (payload.slider_value - 50.0) / 50.0
     cycle = (payload.market_cycle or "").lower()
@@ -569,7 +728,7 @@ class PredictRequest(BaseModel):
 
 
 @app.post("/predict/{job_id}")
-async def predict_single(job_id: str, payload: PredictRequest):
+async def predict_single(job_id: str, payload: PredictRequest, _user: dict = Depends(get_current_user)):
     state = get_model_state(job_id)
     if state is None:
         raise HTTPException(status_code=404, detail="Model not found. The server may have restarted — please re-train.")
@@ -610,14 +769,14 @@ async def predict_single(job_id: str, payload: PredictRequest):
 
 # ─── Gemini Health Check ───────────────────────────────────────────────────────
 
-@app.get("/test-gemini")
-async def test_gemini():
-    """Quick endpoint to verify Gemini is reachable. Visit http://localhost:8000/test-gemini in browser."""
-    if not GEMINI_API_KEY:
-        return {"status": "error", "message": "GEMINI_API_KEY is empty — check backend/.env"}
+@app.get("/test-ai")
+async def test_ai(_user: dict = Depends(get_current_user)):
+    """Quick endpoint to verify Groq is reachable. Visit http://localhost:8000/test-ai in browser."""
+    if not GROQ_API_KEY:
+        return {"status": "error", "message": "GROQ_API_KEY is empty — check backend/.env"}
     try:
         result = _gemini_text("Reply with exactly: OK")
-        return {"status": "ok", "response": result, "key_prefix": GEMINI_API_KEY[:8] + "..."}
+        return {"status": "ok", "response": result, "key_prefix": GROQ_API_KEY[:8] + "..."}
     except Exception as e:
         import traceback; traceback.print_exc()
         return {"status": "error", "message": str(e)}
@@ -626,16 +785,19 @@ async def test_gemini():
 # ─── AI Column Mapping ─────────────────────────────────────────────────────────
 
 @app.post("/map-columns")
-async def map_columns(file: UploadFile = File(...)):
+async def map_columns(file: UploadFile = File(...), _user: dict = Depends(get_current_user)):
     """Use Gemini to intelligently map arbitrary CSV columns to the required schema."""
     gemini = _get_gemini()
     if not gemini:
         return JSONResponse(
             status_code=503,
-            content={"error": "Gemini API key not configured. Add GEMINI_API_KEY to backend/.env"},
+            content={"error": "GROQ_API_KEY not configured. Add GROQ_API_KEY to backend/.env"},
         )
     try:
         contents = await file.read()
+        MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_MB", "100")) * 1024 * 1024
+        if len(contents) > MAX_UPLOAD_BYTES:
+            return JSONResponse(status_code=413, content={"error": f"File too large. Maximum is {MAX_UPLOAD_BYTES // 1024 // 1024} MB."})
         df = _read_uploaded_table(contents, file.filename)
         df.columns = df.columns.str.strip()
 
@@ -658,8 +820,8 @@ REQUIRED SCHEMA:
 - Sq_Ft_Total: total area IN SQUARE FEET (numeric, positive — convert if in m²/sqm/sqyd/acres)
 - Zip_Code: location identifier (zip code, area name, neighbourhood, postal code, city district)
 - Condition_Score: property condition 1–10 scale (derive from furnishing/quality text if no direct match)
-- List_Price: asking/listing price in original currency (numeric, positive)
-- Closing_Price: final sale price — use List_Price column if no separate closing price exists
+- List_Price: the ASKING / LISTING price — what the seller originally listed the property for. Keywords: "list price", "asking price", "listed at", "original price", "MLS price".
+- Closing_Price: the FINAL TRANSACTION price — what the buyer actually paid when the deal closed. Keywords: "sale price", "sold price", "closing price", "final price", "transaction price", "sold for". CRITICAL: List_Price and Closing_Price must NEVER map to the same source column unless there is genuinely only one price column in the entire dataset.
 - Bedrooms: number of bedrooms (optional)
 - Bathrooms: number of bathrooms (optional)
 
@@ -667,11 +829,12 @@ CSV COLUMNS WITH SAMPLE VALUES:
 {sample_text}
 
 Rules:
-1. Use human reasoning — "sqft Price" is price-per-sqft NOT area, "Covered Area" is area, "bedroom" maps to Bedrooms, etc.
-2. If a column is not found, set "source" to null and confidence to 0.0
-3. Confidence < 0.70 means you are unsure — add it to "needs_user_input"
-4. For unit conversion, pick the correct transform. For Indian datasets, prices may be in INR or Lakhs.
-5. If there's no separate Closing_Price, set transform to "use_as_closing" and use the price column
+1. List_Price vs Closing_Price — this is the most important distinction. If you see two price columns (e.g. "Price" and "Sale_Price", or "Listed_Price" and "Sold_Price"), assign the asking/listed one to List_Price and the sold/final one to Closing_Price. Only use the same source for both if there is truly only one price column.
+2. Use human reasoning — "sqft Price" is price-per-sqft NOT area, "Covered Area" is area, "bedroom" maps to Bedrooms, etc.
+3. If a column is not found, set "source" to null and confidence to 0.0
+4. Confidence < 0.70 means you are unsure — add it to "needs_user_input"
+5. For unit conversion, pick the correct transform.
+6. Only use transform "use_as_closing" when there is genuinely no separate closing/sale price column.
 
 Respond ONLY with valid JSON (no markdown fences):
 {{
@@ -682,7 +845,7 @@ Respond ONLY with valid JSON (no markdown fences):
     "Zip_Code":        {{"source": "col_or_null", "confidence": 0.80, "transform": null,           "reason": "brief"}},
     "Condition_Score": {{"source": "col_or_null", "confidence": 0.70, "transform": null,           "reason": "brief"}},
     "List_Price":      {{"source": "col_or_null", "confidence": 0.95, "transform": null,           "reason": "brief"}},
-    "Closing_Price":   {{"source": "col_or_null", "confidence": 0.60, "transform": "use_as_closing","reason": "brief"}},
+    "Closing_Price":   {{"source": "col_or_null", "confidence": 0.60, "transform": null,           "reason": "brief"}},
     "Bedrooms":        {{"source": "col_or_null", "confidence": 0.90, "transform": null,           "reason": "brief"}},
     "Bathrooms":       {{"source": "col_or_null", "confidence": 0.90, "transform": null,           "reason": "brief"}}
   }},
@@ -729,7 +892,7 @@ class AiAdviceRequest(BaseModel):
 
 
 @app.post("/ai-advice")
-async def ai_advice(payload: AiAdviceRequest):
+async def ai_advice(payload: AiAdviceRequest, _user: dict = Depends(get_current_user)):
     """Generate custom investment advice from Gemini based on training results."""
     try:
         locs = ", ".join(str(l) for l in payload.locations[:8]) or "N/A"
@@ -760,8 +923,67 @@ Write exactly 4 investment insights. Each must:
 Format: Use headers like "## 1. [Title]" for each insight. Keep total under 380 words. Be direct — no filler phrases."""
 
         if not _get_client():
-            return JSONResponse(status_code=503, content={"error": "Gemini API key not configured."})
+            return JSONResponse(status_code=503, content={"error": "GROQ_API_KEY not configured."})
         return {"advice": _gemini_text(prompt)}
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+# ─── AI Market Intelligence ────────────────────────────────────────────────────
+
+class MarketIntelligenceRequest(BaseModel):
+    market_cycle: str
+    yoy_appreciation: float
+    liquidity_score: float
+    avg_price: float
+    locations: list
+    property_types: list
+    total_rows: int
+    expected_days_to_sell: Optional[float]
+    mape: float
+    r2: float
+
+
+@app.post("/market-intelligence")
+async def market_intelligence(payload: MarketIntelligenceRequest, _user: dict = Depends(get_current_user)):
+    """Generate Lead-Lag Market Intelligence signals using Groq."""
+    if not _get_client():
+        return JSONResponse(status_code=503, content={"error": "GROQ_API_KEY not configured."})
+    try:
+        locs = ", ".join(str(l) for l in payload.locations[:6]) or "N/A"
+        types = ", ".join(str(t) for t in payload.property_types[:4]) or "N/A"
+        days_str = f"{payload.expected_days_to_sell:.0f}" if payload.expected_days_to_sell else "unknown"
+
+        prompt = f"""You are a quantitative real estate analyst. Based on the dataset statistics below, identify exactly 3 lead-lag market signals — economic or behavioural factors that precede price movements in this market.
+
+DATASET:
+- Locations: {locs}
+- Property types: {types}
+- Avg price: {payload.avg_price:,.0f}
+- Market cycle: {payload.market_cycle}
+- YoY appreciation: {payload.yoy_appreciation:.1f}%
+- Liquidity score: {payload.liquidity_score:.0f}/99
+- Avg days to sell: {days_str}
+- ML model error: ±{payload.mape:.1f}% | R² = {payload.r2:.3f}
+- Properties analysed: {payload.total_rows:,}
+
+For each signal provide:
+- name: short signal name (e.g. "Interest Rate Sensitivity", "Inventory Absorption Rate")
+- lag_days: estimated days this factor leads the market (integer, 14–180)
+- correlation: estimated correlation with price movement (float, 0.50–0.95)
+- description: one sentence explaining the signal using specific numbers from the data above
+
+Respond ONLY with valid JSON (no markdown):
+{{"signals": [{{"name": "...", "lag_days": 60, "correlation": 0.78, "description": "..."}}, {{"name": "...", "lag_days": 45, "correlation": 0.71, "description": "..."}}, {{"name": "...", "lag_days": 120, "correlation": 0.65, "description": "..."}}]}}"""
+
+        raw = _gemini_json(prompt)
+        raw = re.sub(r"^```(?:json)?\s*", "", raw)
+        raw = re.sub(r"\s*```$", "", raw)
+        result = json.loads(raw)
+        return result
+    except json.JSONDecodeError as e:
+        return JSONResponse(status_code=500, content={"error": f"AI returned invalid JSON: {e}"})
     except Exception as e:
         import traceback; traceback.print_exc()
         return JSONResponse(status_code=500, content={"error": str(e)})

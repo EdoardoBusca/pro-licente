@@ -50,23 +50,24 @@ function calcMortgage(principal: number, annualRate: number, termYears: number):
 }
 
 function calcRemainingBalance(principal: number, annualRate: number, termYears: number, yearsPaid: number): number {
+  if (yearsPaid >= termYears) return 0
   if (annualRate === 0) return principal * (1 - yearsPaid / termYears)
   const r = annualRate / 100 / 12
   const n = termYears * 12
-  const p = yearsPaid * 12
+  const p = Math.min(yearsPaid, termYears) * 12
   return principal * (Math.pow(1 + r, n) - Math.pow(1 + r, p)) / (Math.pow(1 + r, n) - 1)
 }
 
-// Simple IRR approximation via bisection
+// IRR via bisection — bounds [-20%, +50%] cover all realistic real estate scenarios
 function calcIRR(cashFlows: number[]): number | null {
   const f = (rate: number) =>
     cashFlows.reduce((acc, cf, t) => acc + cf / Math.pow(1 + rate, t), 0)
-  let lo = -0.99, hi = 10.0
+  let lo = -0.2, hi = 0.5
   if (f(lo) * f(hi) > 0) return null
-  for (let i = 0; i < 100; i++) {
+  for (let i = 0; i < 200; i++) {
     const mid = (lo + hi) / 2
-    if (f(mid) === 0 || (hi - lo) / 2 < 1e-6) return mid * 100
-    f(lo) * f(mid) < 0 ? (hi = mid) : (lo = mid)
+    if ((hi - lo) / 2 < 1e-9) return mid * 100
+    f(lo) * f(mid) <= 0 ? (hi = mid) : (lo = mid)
   }
   return ((lo + hi) / 2) * 100
 }
@@ -115,7 +116,7 @@ function buildProjection(
     const noi = effectiveIncome - yearlyExpenses
     const cashFlow = noi - (year <= loanTermYears ? annualDebtService : 0)
     cumulativeCashFlow += cashFlow
-    const totalReturn = equity - downPayment + cumulativeCashFlow + downPayment
+    const totalReturn = equity - downPayment + (cumulativeCashFlow + downPayment)
 
     rows.push({
       year, propertyValue, loanBalance, equity,
@@ -200,12 +201,14 @@ export function CashFlowTab({ result }: CashFlowTabProps) {
   const irrFlows = [-downPayment, ...rows.map((r, i) => r.cashFlow + (i === rows.length - 1 ? r.equity : 0))]
   const irr = calcIRR(irrFlows)
 
-  const totalCashFlow = finalRow?.cumulativeCashFlow ?? 0
+  // cumulativeCashFlow starts at -downPayment, so add it back to get net operating cash flows only
+  const totalCashFlow = (finalRow?.cumulativeCashFlow ?? 0) + downPayment
   const totalEquityGain = (finalRow?.equity ?? 0) - downPayment
-  const totalReturn = totalCashFlow + totalEquityGain
+  const totalReturn = totalCashFlow + totalEquityGain   // = equity + net cash flows - downPayment
   const totalReturnPct = downPayment > 0 ? (totalReturn / downPayment) * 100 : 0
-  const annualizedReturn = downPayment > 0
-    ? (Math.pow(1 + totalReturn / downPayment, 1 / projectionYears) - 1) * 100
+  // CAGR: compound annual growth of total wealth relative to initial investment
+  const annualizedReturn = downPayment > 0 && projectionYears > 0
+    ? (Math.pow((downPayment + totalReturn) / downPayment, 1 / projectionYears) - 1) * 100
     : 0
 
   const equityChartData = rows.map((r) => ({

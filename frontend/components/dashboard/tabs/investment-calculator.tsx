@@ -234,7 +234,7 @@ export function InvestmentCalculatorTab({ result }: InvestmentCalculatorTabProps
               <MetricCard label="Monthly Payment" value={fmt(metrics.monthlyMortgage)} sub="P&I only" accent="#3B82F6" bg="#EFF6FF" />
               <MetricCard label="Monthly Cash Flow" value={fmt(metrics.annualCashFlow / 12)} sub="After all costs" accent={metrics.annualCashFlow >= 0 ? "#166534" : "#991B1B"} bg={metrics.annualCashFlow >= 0 ? "#f0fdf4" : "#fef2f2"} />
               <MetricCard label="Annual NOI" value={fmt(metrics.noi)} sub="Before debt service" accent="#0F172A" />
-              <MetricCard label="Break-even Rent" value={fmt(metrics.breakEvenRent)} sub="Min. to cover costs" accent="#78350F" bg="#fef9ee" />
+              <MetricCard label="Break-even Rent" value={fmt(metrics.breakEvenRent)} sub="Required gross rent (vacancy-adjusted)" accent="#78350F" bg="#fef9ee" />
             </div>
           </section>
 
@@ -280,7 +280,7 @@ export function InvestmentCalculatorTab({ result }: InvestmentCalculatorTabProps
                     {metrics.dscr >= 1.25 ? "Safe" : metrics.dscr >= 1.0 ? "Break-even" : "Risk"}
                   </span>
                 </div>
-                <p className="text-2xl font-bold text-[#0F172A]">{metrics.dscr.toFixed(2)}x</p>
+                <p className="text-2xl font-bold text-[#0F172A]">{metrics.dscr < 0 ? "Negative" : `${metrics.dscr.toFixed(2)}x`}</p>
                 <div className="mt-2 h-1.5 w-full rounded-full bg-gray-200 overflow-hidden">
                   <div className="h-full rounded-full bg-[#F59E0B]" style={{ width: `${Math.min(100, metrics.dscr * 50)}%` }} />
                 </div>

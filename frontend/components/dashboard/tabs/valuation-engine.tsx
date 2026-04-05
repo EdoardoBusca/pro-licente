@@ -154,12 +154,15 @@ function waterfallRows(
 ) {
   let running = 0
   const priceMove = aiPredictedValue - baselineValue
-  const denom = Math.abs(priceMove) > 1 ? Math.abs(priceMove) : 1
+  // Floor at 0.1% of baseline so tiny price moves don't produce nonsense percentages
+  const denom = Math.max(Math.abs(priceMove), baselineValue * 0.001, 1000)
   return discoveryData.map((d, i) => {
     if (d.kind !== "final") running += d.value
     else running = d.value
     const isPos = d.value >= 0
-    const share = d.kind === "impact" ? `${((Math.abs(d.value) / denom) * 100).toFixed(1)}%` : "—"
+    // Keep sign so negative contributions show as negative share (e.g. "-12.3%")
+    const sharePct = (d.value / denom) * 100
+    const share = d.kind === "impact" ? `${sharePct >= 0 ? "+" : ""}${sharePct.toFixed(1)}%` : "—"
     const rowBg =
       d.kind === "baseline" ? "bg-[#EFF6FF]" :
       d.kind === "final"    ? "bg-[#FFFBEB]" :
