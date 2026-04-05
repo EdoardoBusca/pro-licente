@@ -12,13 +12,16 @@ import { MarketInventoryTab } from "@/components/dashboard/tabs/market-inventory
 import { PredictTab } from "@/components/dashboard/tabs/predict-tab"
 import { InvestmentCalculatorTab } from "@/components/dashboard/tabs/investment-calculator"
 import { CashFlowTab } from "@/components/dashboard/tabs/cash-flow"
+import { ColumnMapper } from "@/components/dashboard/column-mapper"
+import { AiAdvicePanel } from "@/components/dashboard/ai-advice-panel"
 import {
   BarChart3, Settings2, Activity, Building2, PanelLeftOpen, Loader2,
   Moon, Sun, Download, RotateCcw, Home, Calculator, TrendingUp,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { startTraining, waitForTrainingCompletion, simulateMarketScenario } from "@/src/api"
-import type { TrainingResult } from "@/src/types"
+import { startTraining, waitForTrainingCompletion, simulateMarketScenario, mapColumns, getAiAdvice } from "@/src/api"
+import type { TrainingResult, ColumnMappingResult } from "@/src/types"
+import type { ConfirmedMapping } from "@/components/dashboard/column-mapper"
 
 type AppState = "landing" | "loading" | "dashboard"
 
@@ -38,8 +41,19 @@ export default function App() {
     try { const s = sessionStorage.getItem("ev-result"); return s ? JSON.parse(s) : null } catch { return null }
   })
   const [error,    setError]    = useState<string | null>(null)
-  const [jobId,    setJobId]    = useState<string | null>(() => sessionStorage.getItem("ev-job-id"))
+  const [jobId,    setJobId]    = useState<string | null>(() => typeof window !== "undefined" ? sessionStorage.getItem("ev-job-id") : null)
   const [pollProgress, setPollProgress] = useState<{ attempt: number; max: number } | null>(null)
+
+  // Column mapping state
+  const [mappingResult,    setMappingResult]    = useState<ColumnMappingResult | null>(null)
+  const [isMappingLoading, setIsMappingLoading] = useState(false)
+  const [showMapper,       setShowMapper]       = useState(false)
+  const [confirmedMapping, setConfirmedMapping] = useState<ConfirmedMapping | null>(null)
+
+  // AI advice state
+  const [aiAdvice,        setAiAdvice]        = useState<string | null>(null)
+  const [isAdviceLoading, setIsAdviceLoading] = useState(false)
+  const [adviceError,     setAdviceError]     = useState<string | null>(null)
 
   // Theme — persist across reloads
   const [isDark, setIsDark] = useState(() => {
@@ -81,15 +95,84 @@ export default function App() {
     sessionStorage.removeItem("ev-job-id")
   }, [])
 
+  // When a file is selected, automatically call Gemini to map columns
+  const handleFileChange = useCallback(async (f: File | null) => {
+    setFile(f)
+    setMappingResult(null)
+    setConfirmedMapping(null)
+    setShowMapper(false)
+    if (!f) return
+    setIsMappingLoading(true)
+    try {
+      const result = await mapColumns(f)
+      if (result?.error) {
+        // Gemini not configured — skip mapping, let user train as-is
+        setMappingResult(null)
+      } else {
+        setMappingResult(result)
+        setShowMapper(true)
+      }
+    } catch {
+      // Silently skip mapping if endpoint unreachable
+    } finally {
+      setIsMappingLoading(false)
+    }
+  }, [])
+
+  const fetchAiAdvice = useCallback(async (trainingResult: TrainingResult) => {
+    setIsAdviceLoading(true)
+    setAdviceError(null)
+    try {
+      const yoyMetrics = trainingResult.market_dynamics?.temporal_analysis?.yoy_appreciation_metrics ?? []
+      const avgYoy = yoyMetrics.length
+        ? yoyMetrics.reduce((s, m) => s + (m.yoy_appreciation ?? 0), 0) / yoyMetrics.length
+        : 0
+
+      // Extract unique locations and property types from feature names
+      const featureNames = (trainingResult.feature_importance ?? []).map((f) => f.feature)
+      const locations    = featureNames.filter((f) => f.startsWith("Zip_Code_")).map((f) => f.replace("Zip_Code_", "")).slice(0, 8)
+      const propTypes    = featureNames.filter((f) => f.startsWith("Property_Type_")).map((f) => f.replace("Property_Type_", "")).slice(0, 6)
+
+      const payload = {
+        total_rows:            trainingResult.train_size + trainingResult.test_size,
+        locations:             locations.length ? locations : ["N/A"],
+        property_types:        propTypes.length ? propTypes : ["N/A"],
+        avg_price:             trainingResult.market_dynamics?.price_discovery?.find((d) => d.kind === "final")?.change ?? 0,
+        min_price:             trainingResult.arbitrage?.buy_signals?.[trainingResult.arbitrage.buy_signals.length - 1]?.list_price ?? 0,
+        max_price:             trainingResult.arbitrage?.risk_signals?.[0]?.list_price ?? 0,
+        winner_model:          trainingResult.winner,
+        mape:                  trainingResult.mape,
+        r2:                    trainingResult.r2_score,
+        market_cycle:          trainingResult.market_dynamics?.temporal_analysis?.market_cycle ?? "Balanced",
+        yoy_appreciation:      parseFloat(avgYoy.toFixed(2)),
+        liquidity_score:       trainingResult.market_dynamics?.sales_velocity?.liquidity_score ?? 0,
+        expected_days_to_sell: trainingResult.market_dynamics?.sales_velocity?.expected_days_to_sell ?? null,
+        buy_signals_count:     trainingResult.arbitrage?.undervalued_count ?? 0,
+        risk_signals_count:    trainingResult.arbitrage?.overpriced_count ?? 0,
+        mean_delta_pct:        trainingResult.arbitrage?.valuation_delta_stats?.mean_delta_pct ?? 0,
+        confidence_level:      trainingResult.model_diagnostics?.confidence_level ?? "Medium",
+      }
+      const res = await getAiAdvice(payload)
+      if (res?.error) setAdviceError(res.error)
+      else setAiAdvice(res?.advice ?? null)
+    } catch (err: unknown) {
+      setAdviceError(err instanceof Error ? err.message : "Failed to fetch AI advice")
+    } finally {
+      setIsAdviceLoading(false)
+    }
+  }, [])
+
   const handleInitialize = useCallback(async () => {
     if (!file || !target) return
     setIsTraining(true)
     setError(null)
     setResult(null)
     setPollProgress(null)
+    setAiAdvice(null)
+    setAdviceError(null)
 
     try {
-      const started = await startTraining(file, target, parseInt(horizon))
+      const started = await startTraining(file, target, parseInt(horizon), confirmedMapping)
       if (!started?.job_id) throw new Error("Backend did not return a job_id.")
       if (started?.status === "failed") throw new Error(started?.error || "Training failed.")
 
@@ -102,6 +185,8 @@ export default function App() {
       )
       setResult(data)
       sessionStorage.setItem("ev-result", JSON.stringify(data))
+      // Fire AI advice in background after training
+      fetchAiAdvice(data)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Unknown error"
       setError(msg)
@@ -109,7 +194,7 @@ export default function App() {
       setIsTraining(false)
       setPollProgress(null)
     }
-  }, [file, target, horizon])
+  }, [file, target, horizon, confirmedMapping, fetchAiAdvice])
 
   const handleExportJSON = useCallback(() => {
     if (!result) return
@@ -152,10 +237,14 @@ export default function App() {
           target={target}
           horizon={horizon}
           isTraining={isTraining}
-          onFileChange={setFile}
+          isMappingLoading={isMappingLoading}
+          mappingReady={!!mappingResult && !confirmedMapping}
+          mappingConfirmed={!!confirmedMapping}
+          onFileChange={handleFileChange}
           onTargetChange={setTarget}
           onHorizonChange={setHorizon}
           onInitialize={handleInitialize}
+          onReviewMapping={() => setShowMapper(true)}
           onCollapse={() => setSidebarOpen(false)}
         />
       </div>
@@ -224,6 +313,14 @@ export default function App() {
             )}
           </div>
         </header>
+
+        {/* AI Advice Panel */}
+        <AiAdvicePanel
+          advice={aiAdvice}
+          isLoading={isAdviceLoading}
+          error={adviceError}
+          onRefresh={result ? () => fetchAiAdvice(result) : undefined}
+        />
 
         {/* Error banner */}
         {error && (
@@ -302,6 +399,18 @@ export default function App() {
           </Tabs>
         </div>
       </main>
+
+      {/* Column Mapper Modal */}
+      {showMapper && mappingResult && (
+        <ColumnMapper
+          mappingResult={mappingResult}
+          onConfirm={(confirmed) => {
+            setConfirmedMapping(confirmed)
+            setShowMapper(false)
+          }}
+          onCancel={() => setShowMapper(false)}
+        />
+      )}
     </div>
   )
 }

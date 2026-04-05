@@ -2,12 +2,27 @@ import axios from 'axios';
 
 const api = axios.create({ baseURL: 'http://localhost:8000' });
 
-export const startTraining = async (file, target, horizon) => {
+export const startTraining = async (file, target, horizon, columnMapping = null) => {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('target', target);
   formData.append('horizon', String(horizon));
+  if (columnMapping) {
+    formData.append('column_mapping', JSON.stringify(columnMapping));
+  }
   const response = await api.post('/train', formData);
+  return response.data;
+};
+
+export const mapColumns = async (file) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  const response = await api.post('/map-columns', formData);
+  return response.data;
+};
+
+export const getAiAdvice = async (payload) => {
+  const response = await api.post('/ai-advice', payload);
   return response.data;
 };
 

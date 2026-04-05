@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useCallback } from "react"
-import { Upload, FileSpreadsheet, AlertTriangle, Check, Building2, ArrowRight, Sparkles, X, Loader2 } from "lucide-react"
+import { Upload, FileSpreadsheet, AlertTriangle, Check, Building2, ArrowRight, Sparkles, X, Loader2, Wand2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Select,
@@ -16,10 +16,14 @@ interface SidebarProps {
   target: string
   horizon: string
   isTraining: boolean
+  isMappingLoading?: boolean
+  mappingReady?: boolean
+  mappingConfirmed?: boolean
   onFileChange: (file: File | null) => void
   onTargetChange: (target: string) => void
   onHorizonChange: (horizon: string) => void
   onInitialize: () => void
+  onReviewMapping?: () => void
   onCollapse?: () => void
 }
 
@@ -28,10 +32,14 @@ export function Sidebar({
   target,
   horizon,
   isTraining,
+  isMappingLoading = false,
+  mappingReady = false,
+  mappingConfirmed = false,
   onFileChange,
   onTargetChange,
   onHorizonChange,
   onInitialize,
+  onReviewMapping,
   onCollapse,
 }: SidebarProps) {
   const [isDragging, setIsDragging] = useState(false)
@@ -142,6 +150,43 @@ export function Sidebar({
             )}
           </div>
         </div>
+
+        {/* AI Column Mapping Status */}
+        {file && (isMappingLoading || mappingReady || mappingConfirmed) && (
+          <div>
+            {isMappingLoading && (
+              <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-muted text-xs text-muted-foreground">
+                <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                Gemini is reading your columns…
+              </div>
+            )}
+            {mappingConfirmed && !isMappingLoading && (
+              <div className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-estate-green/10 border border-estate-green/20 text-xs">
+                <div className="flex items-center gap-2 text-estate-green">
+                  <Check className="w-3.5 h-3.5 shrink-0" />
+                  Column mapping confirmed
+                </div>
+                {onReviewMapping && (
+                  <button onClick={onReviewMapping} className="text-muted-foreground hover:text-foreground underline underline-offset-2">
+                    Edit
+                  </button>
+                )}
+              </div>
+            )}
+            {mappingReady && !mappingConfirmed && !isMappingLoading && (
+              <button
+                onClick={onReviewMapping}
+                className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl bg-violet-50 border border-violet-200 text-xs text-violet-700 hover:bg-violet-100 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <Wand2 className="w-3.5 h-3.5 shrink-0" />
+                  <span className="font-medium">AI mapped your columns</span>
+                </div>
+                <span className="text-violet-500 font-medium">Review →</span>
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Configuration */}
         <div className="space-y-4">

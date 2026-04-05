@@ -1,10 +1,10 @@
 @echo off
-title Estate Vantage — Backend
+title Estate Vantage - Backend
 cd /d "%~dp0backend"
 
 echo.
 echo  ==========================================
-echo   Estate Vantage — Backend (FastAPI)
+echo   Estate Vantage - Backend (FastAPI)
 echo   http://localhost:8000
 echo  ==========================================
 echo.
@@ -17,7 +17,9 @@ if errorlevel 1 (
 )
 
 echo  Installing / verifying dependencies...
-pip install -r requirements.txt --quiet
+echo  (this can take a few minutes the first time - you will see progress below)
+echo.
+pip install --no-cache-dir -r requirements.txt
 
 echo.
 echo  Starting server...

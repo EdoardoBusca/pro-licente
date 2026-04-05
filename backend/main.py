@@ -28,8 +28,32 @@ import sqlite3
 import json
 import os
 import math
+import re
 from numbers import Real
 from engine import train_logic, get_model_state
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# ─── Gemini Setup ──────────────────────────────────────────────────────────────
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+_gemini_model = None
+
+def _get_gemini():
+    global _gemini_model
+    if not GEMINI_API_KEY:
+        return None
+    if _gemini_model is None:
+        try:
+            import google.generativeai as genai
+            genai.configure(api_key=GEMINI_API_KEY)
+            _gemini_model = genai.GenerativeModel(
+                "gemini-1.5-flash",
+                generation_config={"temperature": 0.1, "response_mime_type": "application/json"},
+            )
+        except Exception:
+            return None
+    return _gemini_model
 
 app = FastAPI()
 
@@ -157,6 +181,42 @@ def _read_uploaded_table(contents: bytes, filename: str):
         raise ValueError(f"Could not read uploaded file. {error_text}")
 
 
+def _apply_column_mapping(df: pd.DataFrame, mapping: dict) -> pd.DataFrame:
+    """Rename columns and apply unit/currency transforms from AI-generated mapping."""
+    NUMERIC_TRANSFORMS = {
+        "sqm_to_sqft":       lambda x: x * 10.764,
+        "sqyd_to_sqft":      lambda x: x * 9.0,
+        "acres_to_sqft":     lambda x: x * 43560.0,
+        "inr_to_usd":        lambda x: x / 83.0,
+        "lakh_to_usd":       lambda x: x * 1200.0,
+        "crore_to_usd":      lambda x: x * 120000.0,
+        "thousands_to_units": lambda x: x * 1000.0,
+    }
+    FURNISH_SCORE = {
+        "furnished": 9, "fully furnished": 9,
+        "semi-furnished": 7, "semi furnished": 7, "semifurnished": 7,
+        "unfurnished": 5, "bare shell": 4,
+    }
+    result = df.copy()
+    for target_col, info in mapping.items():
+        source = (info or {}).get("source")
+        transform = (info or {}).get("transform")
+        if not source or source not in df.columns:
+            continue
+        raw = df[source]
+        if transform in NUMERIC_TRANSFORMS:
+            result[target_col] = pd.to_numeric(raw, errors="coerce").apply(NUMERIC_TRANSFORMS[transform])
+        elif transform == "derive_condition_from_furnishing":
+            result[target_col] = (
+                raw.astype(str).str.lower().str.strip()
+                .map(lambda v: FURNISH_SCORE.get(v, 6))
+            )
+        else:
+            # null, "use_as_closing", or any unknown transform — just copy/rename
+            result[target_col] = raw
+    return result
+
+
 def _validate_real_estate_schema(df: pd.DataFrame, target: str):
     missing = [column for column in MANDATORY_REAL_ESTATE_COLUMNS if column not in df.columns]
     if missing:
@@ -269,7 +329,8 @@ async def start_training(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     target: str = Form(...),
-    horizon: int = Form(180)
+    horizon: int = Form(180),
+    column_mapping: Optional[str] = Form(None),
 ):
     try:
         job_id = str(uuid.uuid4())
@@ -287,6 +348,13 @@ async def start_training(
             message = "Uploaded file was read successfully but contains no data rows."
             set_job_result(job_id, "failed", error=message)
             return {"job_id": job_id, "message": "Training failed", "status": "failed", "error": message}
+
+        if column_mapping:
+            try:
+                mapping_dict = json.loads(column_mapping)
+                df = _apply_column_mapping(df, mapping_dict)
+            except Exception as map_err:
+                return {"job_id": job_id, "status": "failed", "error": f"Column mapping error: {map_err}"}
 
         _validate_real_estate_schema(df, target.strip())
         
@@ -436,3 +504,156 @@ async def predict_single(job_id: str, payload: PredictRequest):
     X_scaled = scaler.transform(X_input)
     prediction = float(model.predict(X_scaled)[0])
     return {"predicted_price": round(prediction, 2)}
+
+
+# ─── AI Column Mapping ─────────────────────────────────────────────────────────
+
+@app.post("/map-columns")
+async def map_columns(file: UploadFile = File(...)):
+    """Use Gemini to intelligently map arbitrary CSV columns to the required schema."""
+    gemini = _get_gemini()
+    if not gemini:
+        return JSONResponse(
+            status_code=503,
+            content={"error": "Gemini API key not configured. Add GEMINI_API_KEY to backend/.env"},
+        )
+    try:
+        contents = await file.read()
+        df = _read_uploaded_table(contents, file.filename)
+        df.columns = df.columns.str.strip()
+
+        # Build column samples: name + first 3 non-null values
+        samples = {}
+        for col in df.columns:
+            vals = df[col].dropna().astype(str).head(3).tolist()
+            samples[col] = vals
+
+        sample_text = "\n".join(
+            f'  "{col}": [{", ".join(repr(v) for v in vals)}]'
+            for col, vals in samples.items()
+        )
+
+        prompt = f"""You are a real estate data schema expert. Map the given CSV columns to the required schema.
+
+REQUIRED SCHEMA:
+- Date_Listed: listing date (any parseable date format)
+- Property_Type: type of property (Apartment, House, Condo, Villa, etc.)
+- Sq_Ft_Total: total area IN SQUARE FEET (numeric, positive — convert if in m²/sqm/sqyd/acres)
+- Zip_Code: location identifier (zip code, area name, neighbourhood, postal code, city district)
+- Condition_Score: property condition 1–10 scale (derive from furnishing/quality text if no direct match)
+- List_Price: asking/listing price in original currency (numeric, positive)
+- Closing_Price: final sale price — use List_Price column if no separate closing price exists
+- Bedrooms: number of bedrooms (optional)
+- Bathrooms: number of bathrooms (optional)
+
+CSV COLUMNS WITH SAMPLE VALUES:
+{sample_text}
+
+Rules:
+1. Use human reasoning — "sqft Price" is price-per-sqft NOT area, "Covered Area" is area, "bedroom" maps to Bedrooms, etc.
+2. If a column is not found, set "source" to null and confidence to 0.0
+3. Confidence < 0.70 means you are unsure — add it to "needs_user_input"
+4. For unit conversion, pick the correct transform. For Indian datasets, prices may be in INR or Lakhs.
+5. If there's no separate Closing_Price, set transform to "use_as_closing" and use the price column
+
+Respond ONLY with valid JSON (no markdown fences):
+{{
+  "mappings": {{
+    "Date_Listed":     {{"source": "col_or_null", "confidence": 0.95, "transform": null,           "reason": "brief"}},
+    "Property_Type":   {{"source": "col_or_null", "confidence": 0.90, "transform": null,           "reason": "brief"}},
+    "Sq_Ft_Total":     {{"source": "col_or_null", "confidence": 0.85, "transform": "sqm_to_sqft",  "reason": "brief"}},
+    "Zip_Code":        {{"source": "col_or_null", "confidence": 0.80, "transform": null,           "reason": "brief"}},
+    "Condition_Score": {{"source": "col_or_null", "confidence": 0.70, "transform": null,           "reason": "brief"}},
+    "List_Price":      {{"source": "col_or_null", "confidence": 0.95, "transform": null,           "reason": "brief"}},
+    "Closing_Price":   {{"source": "col_or_null", "confidence": 0.60, "transform": "use_as_closing","reason": "brief"}},
+    "Bedrooms":        {{"source": "col_or_null", "confidence": 0.90, "transform": null,           "reason": "brief"}},
+    "Bathrooms":       {{"source": "col_or_null", "confidence": 0.90, "transform": null,           "reason": "brief"}}
+  }},
+  "needs_user_input": [],
+  "summary": "one sentence dataset description and notable conversions"
+}}
+
+Supported transforms: null, "sqm_to_sqft", "sqyd_to_sqft", "acres_to_sqft", "inr_to_usd", "lakh_to_usd", "crore_to_usd", "thousands_to_units", "derive_condition_from_furnishing", "use_as_closing"
+"""
+        response = gemini.generate_content(prompt)
+        raw = response.text.strip()
+        # Strip markdown fences if model ignores mime_type instruction
+        raw = re.sub(r"^```(?:json)?\s*", "", raw)
+        raw = re.sub(r"\s*```$", "", raw)
+        result = json.loads(raw)
+        result["all_columns"] = list(df.columns)
+        return result
+    except json.JSONDecodeError as e:
+        return JSONResponse(status_code=500, content={"error": f"Gemini returned invalid JSON: {e}"})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+# ─── AI Investment Advice ──────────────────────────────────────────────────────
+
+class AiAdviceRequest(BaseModel):
+    total_rows: int
+    locations: list
+    property_types: list
+    avg_price: float
+    min_price: float
+    max_price: float
+    winner_model: str
+    mape: float
+    r2: float
+    market_cycle: str
+    yoy_appreciation: float
+    liquidity_score: float
+    expected_days_to_sell: Optional[float]
+    buy_signals_count: int
+    risk_signals_count: int
+    mean_delta_pct: float
+    confidence_level: str
+
+
+@app.post("/ai-advice")
+async def ai_advice(payload: AiAdviceRequest):
+    """Generate custom investment advice from Gemini based on training results."""
+    gemini = _get_gemini()
+    if not gemini:
+        return JSONResponse(
+            status_code=503,
+            content={"error": "Gemini API key not configured. Add GEMINI_API_KEY to backend/.env"},
+        )
+    try:
+        locs = ", ".join(str(l) for l in payload.locations[:8]) or "N/A"
+        types = ", ".join(str(t) for t in payload.property_types[:6]) or "N/A"
+        days_str = f"{payload.expected_days_to_sell:.0f} days" if payload.expected_days_to_sell else "unknown"
+
+        prompt = f"""You are a senior real estate investment advisor. Analyze these ML results and give sharp, specific advice.
+
+DATASET ANALYTICS:
+- Properties analysed: {payload.total_rows:,}
+- Locations: {locs}
+- Property types: {types}
+- Price range: {payload.min_price:,.0f} – {payload.max_price:,.0f} (avg: {payload.avg_price:,.0f})
+- Best model: {payload.winner_model} | Accuracy: ±{payload.mape:.1f}% error | R² = {payload.r2:.3f}
+- Model confidence: {payload.confidence_level}
+- Market cycle: {payload.market_cycle}
+- YoY price appreciation: {payload.yoy_appreciation:.1f}%
+- Liquidity score: {payload.liquidity_score:.0f}/99 | Avg time to sell: {days_str}
+- Undervalued properties (buy signals): {payload.buy_signals_count}
+- Overvalued properties (risk signals): {payload.risk_signals_count}
+- Avg AI vs listed price delta: {payload.mean_delta_pct:.1f}%
+
+Write exactly 4 investment insights. Each must:
+1. Reference specific numbers from the data above
+2. Give one clear, actionable recommendation
+3. Flag any associated risk if relevant
+
+Format: Use headers like "## 1. [Title]" for each insight. Keep total under 380 words. Be direct — no filler phrases."""
+
+        import google.generativeai as genai
+        advice_model = genai.GenerativeModel(
+            "gemini-1.5-flash",
+            generation_config={"temperature": 0.4},
+        )
+        response = advice_model.generate_content(prompt)
+        return {"advice": response.text.strip()}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})

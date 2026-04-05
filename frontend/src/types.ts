@@ -147,6 +147,23 @@ export interface PredictResult {
   predicted_price: number;
 }
 
+// ─── Column Mapping (Gemini) ──────────────────────────────────────────────────
+
+export interface ColumnMappingEntry {
+  source:     string | null;
+  confidence: number;
+  transform:  string | null;
+  reason:     string;
+}
+
+export interface ColumnMappingResult {
+  mappings:         Record<string, ColumnMappingEntry>;
+  needs_user_input: string[];
+  summary:          string;
+  all_columns:      string[];
+  error?:           string;
+}
+
 export interface TrainingResult {
   winner:                  string;
   r2_score:                number;
