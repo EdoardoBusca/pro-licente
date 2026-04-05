@@ -67,7 +67,9 @@ export function Sidebar({
     if (files && files.length > 0) onFileChange(files[0])
   }
 
-  const canInitialize = file !== null && target !== "" && !isTraining
+  // Require mapping to be confirmed when a file is loaded and mapping is available
+  const needsMapping = file !== null && !mappingConfirmed && !isMappingLoading
+  const canInitialize = file !== null && target !== "" && !isTraining && !needsMapping
 
   return (
     <aside className="w-80 min-h-screen bg-card border-r border-border flex flex-col">
@@ -228,24 +230,35 @@ export function Sidebar({
         </div>
 
         {/* Initialize Button */}
-        <Button
-          onClick={onInitialize}
-          className="w-full h-12 rounded-xl gap-2 group"
-          disabled={!canInitialize}
-        >
-          {isTraining ? (
-            <>
-              <Loader2 className="w-4 h-4 animate-spin" />
-              Training Models...
-            </>
-          ) : (
-            <>
-              <Sparkles className="w-4 h-4" />
-              Initialize Engine
-              <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
-            </>
-          )}
-        </Button>
+        {needsMapping && !isMappingLoading ? (
+          <button
+            onClick={onReviewMapping}
+            className="w-full h-12 rounded-xl gap-2 flex items-center justify-center bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium transition-colors"
+          >
+            <Wand2 className="w-4 h-4" />
+            Review Column Mapping
+            <ArrowRight className="w-4 h-4" />
+          </button>
+        ) : (
+          <Button
+            onClick={onInitialize}
+            className="w-full h-12 rounded-xl gap-2 group"
+            disabled={!canInitialize}
+          >
+            {isTraining ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Training Models...
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-4 h-4" />
+                Initialize Engine
+                <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+              </>
+            )}
+          </Button>
+        )}
       </div>
 
       {/* Data Quality Notice */}

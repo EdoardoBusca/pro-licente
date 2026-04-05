@@ -95,7 +95,7 @@ export default function App() {
     sessionStorage.removeItem("ev-job-id")
   }, [])
 
-  // When a file is selected, automatically call Gemini to map columns
+  // When a file is selected, call Gemini to map columns — always show the modal
   const handleFileChange = useCallback(async (f: File | null) => {
     setFile(f)
     setMappingResult(null)
@@ -105,15 +105,17 @@ export default function App() {
     setIsMappingLoading(true)
     try {
       const result = await mapColumns(f)
-      if (result?.error) {
-        // Gemini not configured — skip mapping, let user train as-is
-        setMappingResult(null)
-      } else {
-        setMappingResult(result)
-        setShowMapper(true)
-      }
+      // Even if Gemini errored, still show the modal with whatever columns came back
+      // so the user can map manually
+      const fallback: import("@/src/types").ColumnMappingResult = result?.error
+        ? { mappings: {}, needs_user_input: [], summary: "Gemini unavailable — please map columns manually.", all_columns: [] }
+        : result
+      setMappingResult(fallback)
+      setShowMapper(true)
     } catch {
-      // Silently skip mapping if endpoint unreachable
+      // Backend unreachable — show empty mapper so user can still map manually
+      setMappingResult({ mappings: {}, needs_user_input: [], summary: "Could not reach backend — please map columns manually.", all_columns: [] })
+      setShowMapper(true)
     } finally {
       setIsMappingLoading(false)
     }

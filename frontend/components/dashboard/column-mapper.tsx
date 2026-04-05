@@ -16,26 +16,21 @@ const REQUIRED_COLS = [
 const OPTIONAL_COLS = ["Bedrooms", "Bathrooms"]
 const ALL_TARGET_COLS = [...REQUIRED_COLS, ...OPTIONAL_COLS]
 
+// Only area unit conversions — no currency transforms
 const TRANSFORM_LABELS: Record<string, string> = {
-  sqm_to_sqft:                    "× 10.764 (m² → ft²)",
-  sqyd_to_sqft:                   "× 9 (yd² → ft²)",
-  acres_to_sqft:                  "× 43,560 (acres → ft²)",
-  inr_to_usd:                     "÷ 83 (INR → USD)",
-  lakh_to_usd:                    "× 1,200 (Lakh INR → USD)",
-  crore_to_usd:                   "× 120,000 (Crore INR → USD)",
-  thousands_to_units:             "× 1,000 (thousands → units)",
-  derive_condition_from_furnishing: "Derived from furnishing level",
-  use_as_closing:                 "Copy of List Price column",
+  sqm_to_sqft:  "m² → ft²  (× 10.764)",
+  sqft_to_sqm:  "ft² → m²  (÷ 10.764)",
+  sqyd_to_sqft: "yd² → ft²  (× 9)",
 }
 
 const TARGET_DESCRIPTIONS: Record<string, string> = {
-  Date_Listed:     "When the property was listed for sale",
-  Property_Type:   "Category (Apartment, House, Condo, Villa…)",
-  Sq_Ft_Total:     "Total floor area in square feet",
-  Zip_Code:        "Location: zip code, area name or neighbourhood",
-  Condition_Score: "Property condition 1–10 scale",
-  List_Price:      "Original asking / listing price",
-  Closing_Price:   "Final sale price (or copy of List Price)",
+  Date_Listed:     "When the property was listed for sale (any date format)",
+  Property_Type:   "Type of property — Apartment, House, Villa, Condo…",
+  Sq_Ft_Total:     "Total floor area (will be stored in sq ft)",
+  Zip_Code:        "Location identifier — zip code, area name, or neighbourhood",
+  Condition_Score: "Property condition on a 1–10 scale (auto-scaled if needed)",
+  List_Price:      "Asking / listing price",
+  Closing_Price:   "Final sale price — leave blank if same as listing price",
   Bedrooms:        "Number of bedrooms",
   Bathrooms:       "Number of bathrooms",
 }
