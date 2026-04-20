@@ -473,7 +473,9 @@ def _build_price_discovery(base_price, projection, feature_importance, feature_c
         weight = abs(float(item.get("importance", 0.0))) / total_weight
 
         corr_val = float(feature_correlations.get(raw_name, 0.0))
-        if abs(corr_val) >= 0.05:
+        if corr_val != 0.0:
+            # Always trust the actual data correlation direction, even if weak.
+            # Only fall back to keyword heuristics when no correlation data exists at all.
             sign = 1.0 if corr_val >= 0 else -1.0
         else:
             directional_negative = any(token in raw_name.lower() for token in ["interest", "rate", "age", "tax", "distance"])
@@ -599,7 +601,7 @@ def _baseline_forecast(history_values, horizon, label):
         "train_size": len(history),
         "test_size": 0,
         "split_ratio": "N/A",
-        "leaderboard": [{"name": label, "r2": 0.0, "mae": 0.0, "rmse": 0.0}],
+        "leaderboard": [{"name": label, "r2": 0.0, "mae": 0.0, "rmse": 0.0, "mape": 0.0}],
         "model_failures": [],
         "insights": [],
         "feature_importance": [],
@@ -716,7 +718,14 @@ def _calculate_market_cycle(yoy_metrics):
     if not yoy_metrics or len(yoy_metrics) < 2:
         return "Balanced (Insufficient History)"
 
-    recent_yoy = yoy_metrics[-1]["yoy_appreciation"]
+    # Average last 3 years (or all available) to smooth single-year noise
+    lookback = yoy_metrics[-min(3, len(yoy_metrics)):]
+    valid_rates = [m["yoy_appreciation"] for m in lookback
+                   if isinstance(m.get("yoy_appreciation"), (int, float))
+                   and np.isfinite(m["yoy_appreciation"])]
+    if not valid_rates:
+        return "Balanced (Insufficient History)"
+    recent_yoy = float(np.mean(valid_rates))
 
     # Thresholds account for ~3% baseline inflation:
     # >8% = clearly above inflation (Hot), 3–8% = real gains (Balanced),
@@ -1025,14 +1034,18 @@ def train_logic(df, target_col, horizon=30, job_id=None):
     insights = []
     if shap is not None and len(X_test) > 0:
         try:
+            # Sample up to 100 test rows so SHAP represents the model broadly,
+            # not just one property.
+            shap_sample = X_test.iloc[:min(100, len(X_test))]
             if "Linear" in winner_name and hasattr(shap, "LinearExplainer"):
                 explainer = shap.LinearExplainer(best_model, X_train)
             else:
                 explainer = shap.Explainer(best_model, X_train)
 
-            shap_values = explainer(X_test.head(1))
+            shap_values = explainer(shap_sample)
 
-            vals = shap_values.values[0]
+            # Average absolute SHAP across all sampled rows for representative importances
+            vals = np.mean(np.abs(shap_values.values), axis=0)
             vals = np.asarray(vals).reshape(-1)
             feature_names = X_test.columns
             insights = [
@@ -1045,7 +1058,9 @@ def train_logic(df, target_col, horizon=30, job_id=None):
             insights = []
 
     history = y.tolist()
-    residuals = [float(y_test.iloc[i] - best_predictions[i]) for i in range(len(best_predictions))]
+    residuals_raw = [float(y_test.iloc[i] - best_predictions[i]) for i in range(len(best_predictions))]
+    # Filter NaN residuals before any downstream use — a NaN propagates through std/velocity
+    residuals = [r for r in residuals_raw if np.isfinite(r)]
     prediction_std = float(np.std(residuals)) if residuals else 0.0
     
     # --- COMPUTE FEATURE IMPORTANCE ---
@@ -1057,10 +1072,11 @@ def train_logic(df, target_col, horizon=30, job_id=None):
                 importances = best_model.feature_importances_
             elif hasattr(best_model, 'coef_'):
                 # Linear Regression: normalize absolute coefficients to sum to 1 so they're
-                # on the same scale as tree feature_importances_ and comparable across models
+                # on the same scale as tree feature_importances_ and comparable across models.
+                # Always divide by total (fallback to 1.0 to avoid zero-division or zero array).
                 raw = np.abs(best_model.coef_)
                 total = raw.sum()
-                importances = raw / total if total > 0 else raw
+                importances = raw / (total if total > 0 else 1.0)
             else:
                 importances = None
 
@@ -1144,8 +1160,10 @@ def train_logic(df, target_col, horizon=30, job_id=None):
     
     for i in range(horizon):
         day_number = i + 1
+        # Both sentiment and momentum use exponential compounding for consistency.
+        # monthly_rate^(days/30) compounds correctly at any horizon.
         sentiment_multiplier = (1.0 + market_sentiment_monthly) ** (day_number / 30.0)
-        momentum_multiplier = 1.0 + (momentum_pct * (day_number / 30.0))
+        momentum_multiplier  = (1.0 + momentum_pct)             ** (day_number / 30.0)
         pred = base_anchor_pred * sentiment_multiplier * momentum_multiplier
         
         projection.append({

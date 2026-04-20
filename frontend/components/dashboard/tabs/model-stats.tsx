@@ -10,6 +10,7 @@ import {
 } from "recharts"
 import { Trophy, Database, GitBranch, Layers, TrendingUp, CheckCircle2 } from "lucide-react"
 import type { TrainingResult } from "@/src/types"
+import { InfoTip } from "@/components/ui/info-tip"
 
 interface ModelStatsTabProps {
   result: TrainingResult
@@ -47,10 +48,10 @@ export function ModelStatsTab({ result }: ModelStatsTabProps) {
             </div>
           </div>
           <div className="grid grid-cols-4 gap-6">
-            <MetricBadge label="MAPE"  value={`${result.mape.toFixed(1)}%`} highlight />
-            <MetricBadge label="MAE"   value={`$${(result.mae / 1000).toFixed(1)}K`} />
-            <MetricBadge label="RMSE"  value={`$${(result.rmse / 1000).toFixed(1)}K`} />
-            <MetricBadge label="R²"    value={result.r2_score.toFixed(2)} />
+            <MetricBadge label="MAPE"  value={`${result.mape.toFixed(1)}%`} highlight tip="Mean Absolute Percentage Error — average % gap between predicted and actual sale prices. Lower is better. Under 10% is strong for real estate." />
+            <MetricBadge label="MAE"   value={`$${(result.mae / 1000).toFixed(1)}K`} tip="Mean Absolute Error — average dollar difference between predictions and actual prices." />
+            <MetricBadge label="RMSE"  value={`$${(result.rmse / 1000).toFixed(1)}K`} tip="Root Mean Squared Error — like MAE but penalises large errors more heavily. Useful for spotting outlier predictions." />
+            <MetricBadge label="R²"    value={result.r2_score.toFixed(2)} tip="R-squared — how much of the price variation the model explains. 1.0 is perfect; above 0.75 is strong for real estate." />
           </div>
         </div>
       </div>
@@ -59,7 +60,7 @@ export function ModelStatsTab({ result }: ModelStatsTabProps) {
       <div className="grid grid-cols-3 gap-4">
         <StatCard icon={Database}  value={totalSamples.toLocaleString()} subtext="properties" label="Sample Size" />
         <StatCard icon={GitBranch} value={result.split_ratio} subtext="train / test split" label="Split Ratio" />
-        <StatCard icon={Layers}    value={String(result.model_diagnostics.feature_engineering.total_features)} subtext="engineered features" label="Features" />
+        <StatCard icon={Layers}    value={result.model_diagnostics.confidence_level ?? "—"} subtext="model confidence level" label="AI Confidence" />
       </div>
 
       {/* Forecast Chart */}
@@ -126,8 +127,8 @@ export function ModelStatsTab({ result }: ModelStatsTabProps) {
       {result.residuals && result.residuals.length > 0 && (
         <Card className="border-0 shadow-sm">
           <CardHeader className="pb-4">
-            <CardTitle className="text-lg font-semibold">Residuals Distribution</CardTitle>
-            <p className="text-sm text-muted-foreground">Prediction error spread — tighter is better</p>
+            <CardTitle className="text-lg font-semibold flex items-center">Prediction Error Spread<InfoTip text="Distribution of prediction errors (predicted minus actual). A tight bell curve centered at $0 means unbiased predictions with no systematic over- or under-valuation." /></CardTitle>
+            <p className="text-sm text-muted-foreground">How errors are distributed — tighter and centered on $0 is better</p>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={200}>
@@ -210,7 +211,7 @@ export function ModelStatsTab({ result }: ModelStatsTabProps) {
         <CardHeader className="pb-4">
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-lg font-semibold">Model Leaderboard</CardTitle>
+              <CardTitle className="text-lg font-semibold flex items-center">Model Leaderboard<InfoTip text="All models trained in parallel on your data and ranked by MAPE. The #1 model is automatically selected for all valuations." /></CardTitle>
               <p className="text-sm text-muted-foreground mt-1">Performance comparison across all trained models</p>
             </div>
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted text-sm">
@@ -272,10 +273,13 @@ function buildResidualBuckets(residuals: number[]): { label: string; count: numb
   })
 }
 
-function MetricBadge({ label, value, highlight = false }: { label: string; value: string; highlight?: boolean }) {
+function MetricBadge({ label, value, highlight = false, tip }: { label: string; value: string; highlight?: boolean; tip?: string }) {
   return (
     <div className="text-center">
-      <p className="text-xs text-background/50 mb-1">{label}</p>
+      <p className="text-xs text-background/50 mb-1 flex items-center justify-center">
+        {label}
+        {tip && <InfoTip text={tip} />}
+      </p>
       <p className={`text-xl font-semibold ${highlight ? "text-estate-green" : ""}`}>{value}</p>
     </div>
   )

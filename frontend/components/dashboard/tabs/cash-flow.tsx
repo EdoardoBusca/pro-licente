@@ -6,7 +6,9 @@ import {
   BarChart, Bar, Cell, ReferenceLine, Legend,
 } from "recharts"
 import { TrendingUp, DollarSign, Building2, Info, PiggyBank, Layers } from "lucide-react"
+import { InfoTip } from "@/components/ui/info-tip"
 import type { TrainingResult } from "@/src/types"
+import { calcMortgage, calcRemainingBalance, calcIRR, getDefaultPrice, getDefaultAppreciation } from "@/src/finance"
 
 interface CashFlowTabProps {
   result: TrainingResult
@@ -21,55 +23,6 @@ const fmtK = (n: number) => {
   if (Math.abs(n) >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`
   if (Math.abs(n) >= 1_000) return `$${(n / 1_000).toFixed(0)}K`
   return `$${Math.round(n)}`
-}
-
-function getDefaultPrice(result: TrainingResult): number {
-  const fromDiscovery = result.market_dynamics?.price_discovery?.find((d) => d.kind === "final")?.change
-  if (fromDiscovery && fromDiscovery > 0) return Math.round(fromDiscovery)
-  const fromProjection = result.projection?.[result.projection.length - 1]?.val
-  if (fromProjection && fromProjection > 0) return Math.round(fromProjection)
-  return 450000
-}
-
-function getDefaultAppreciation(result: TrainingResult): number {
-  const metrics = result.market_dynamics?.temporal_analysis?.yoy_appreciation_metrics ?? []
-  if (metrics.length === 0) return 3.5
-  const validRates = metrics
-    .map((m) => Number(m.yoy_appreciation))
-    .filter((v) => Number.isFinite(v) && v > -20 && v < 40)
-  if (validRates.length === 0) return 3.5
-  const avg = validRates.reduce((a, b) => a + b, 0) / validRates.length
-  return Math.max(0, Math.min(15, parseFloat(avg.toFixed(1))))
-}
-
-function calcMortgage(principal: number, annualRate: number, termYears: number): number {
-  if (annualRate === 0) return principal / (termYears * 12)
-  const r = annualRate / 100 / 12
-  const n = termYears * 12
-  return (principal * r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1)
-}
-
-function calcRemainingBalance(principal: number, annualRate: number, termYears: number, yearsPaid: number): number {
-  if (yearsPaid >= termYears) return 0
-  if (annualRate === 0) return principal * (1 - yearsPaid / termYears)
-  const r = annualRate / 100 / 12
-  const n = termYears * 12
-  const p = Math.min(yearsPaid, termYears) * 12
-  return principal * (Math.pow(1 + r, n) - Math.pow(1 + r, p)) / (Math.pow(1 + r, n) - 1)
-}
-
-// IRR via bisection — bounds [-20%, +50%] cover all realistic real estate scenarios
-function calcIRR(cashFlows: number[]): number | null {
-  const f = (rate: number) =>
-    cashFlows.reduce((acc, cf, t) => acc + cf / Math.pow(1 + rate, t), 0)
-  let lo = -0.2, hi = 0.5
-  if (f(lo) * f(hi) > 0) return null
-  for (let i = 0; i < 200; i++) {
-    const mid = (lo + hi) / 2
-    if ((hi - lo) / 2 < 1e-9) return mid * 100
-    f(lo) * f(mid) <= 0 ? (hi = mid) : (lo = mid)
-  }
-  return ((lo + hi) / 2) * 100
 }
 
 interface ProjectionRow {
@@ -235,6 +188,7 @@ export function CashFlowTab({ result }: CashFlowTabProps) {
             sub: fmtPct(totalReturnPct, 0) + " on invested capital",
             color: totalReturn >= 0 ? "#166534" : "#991B1B",
             bg: totalReturn >= 0 ? "#f0fdf4" : "#fef2f2",
+            tip: "Total wealth created: equity built up plus all net cash flows, minus your initial down payment.",
           },
           {
             label: "IRR",
@@ -242,6 +196,7 @@ export function CashFlowTab({ result }: CashFlowTabProps) {
             sub: "Internal rate of return",
             color: (irr ?? 0) >= 10 ? "#166534" : (irr ?? 0) >= 6 ? "#92400E" : "#991B1B",
             bg: "#F8FAFC",
+            tip: "Annualised return that accounts for the time value of all cash flows including the final sale. The standard benchmark for comparing investments.",
           },
           {
             label: "Equity at Exit",
@@ -249,6 +204,7 @@ export function CashFlowTab({ result }: CashFlowTabProps) {
             sub: `Property: ${fmt(finalRow?.propertyValue ?? 0)}`,
             color: "#1D4ED8",
             bg: "#EFF6FF",
+            tip: "Projected property value minus remaining loan balance at the end of your holding period — what you'd pocket before taxes on a sale.",
           },
           {
             label: "Cumulative Cash Flow",
@@ -256,10 +212,14 @@ export function CashFlowTab({ result }: CashFlowTabProps) {
             sub: `${projectionYears} years of net income`,
             color: totalCashFlow >= 0 ? "#166534" : "#991B1B",
             bg: totalCashFlow >= 0 ? "#f0fdf4" : "#fef2f2",
+            tip: "Total net operating income minus mortgage payments over the full holding period, before the sale.",
           },
         ].map((kpi) => (
           <div key={kpi.label} className="rounded-xl border border-gray-100 p-5" style={{ background: kpi.bg }}>
-            <p className="text-xs uppercase tracking-wide text-[#64748B]">{kpi.label}</p>
+            <p className="text-xs uppercase tracking-wide text-[#64748B] flex items-center">
+              {kpi.label}
+              <InfoTip text={kpi.tip} />
+            </p>
             <p className="text-2xl font-bold mt-1.5" style={{ color: kpi.color }}>{kpi.value}</p>
             <p className="text-xs text-[#94A3B8] mt-1">{kpi.sub}</p>
           </div>
@@ -321,7 +281,7 @@ export function CashFlowTab({ result }: CashFlowTabProps) {
           <section className="rounded-xl border border-gray-100 bg-white p-6 shadow-[0_2px_10px_rgba(15,23,42,0.04)]">
             <div className="flex items-center gap-2 mb-5">
               <Layers className="w-4 h-4 text-[#334155]" />
-              <h3 className="text-base font-semibold text-[#0F172A]">Equity Build-up</h3>
+              <h3 className="text-base font-semibold text-[#0F172A] flex items-center">Equity Build-up<InfoTip text="How your ownership stake grows each year as the loan pays down (amortisation) and the property appreciates. The gap between property value and loan balance is your equity." /></h3>
             </div>
             <ResponsiveContainer width="100%" height={200}>
               <AreaChart data={equityChartData} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>

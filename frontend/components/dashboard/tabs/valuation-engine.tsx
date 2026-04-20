@@ -11,6 +11,7 @@ import {
   Lightbulb, BookOpen, FlaskConical, Sliders, Eye, EyeOff,
 } from "lucide-react"
 import type { TrainingResult, ArbitrageSignal } from "@/src/types"
+import { InfoTip } from "@/components/ui/info-tip"
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -349,6 +350,7 @@ export function ValuationEngineTab({ result }: ValuationEngineTabProps) {
           <div className="flex items-center gap-2 mb-4">
             <Activity className="w-4 h-4 text-[#2F5D50]" />
             <span className="text-sm font-medium text-[#2F5D50]">Model Accuracy</span>
+            <InfoTip text="MAPE on held-out test data — properties the model never saw during training. Lower = more accurate." />
           </div>
           <div className="mb-2 flex items-end gap-2">
             <span className="text-6xl font-extrabold text-[#1F4F43] font-mono">{safeNum(result.mape).toFixed(1)}%</span>
@@ -381,7 +383,7 @@ export function ValuationEngineTab({ result }: ValuationEngineTabProps) {
               <span className="font-bold text-[#292524] font-mono">{daysToSell > 0 ? `${daysToSell} days` : "—"}</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-[#78716C]">Monthly Sentiment</span>
+              <span className="text-[#78716C] flex items-center">Monthly Sentiment<InfoTip text="Average price momentum over the last month from your data. Positive = prices trending up, negative = softening market." /></span>
               <span className={`font-bold font-mono ${sentimentPos ? "text-[#2F7A5D]" : "text-[#B4534D]"}`}>
                 {sentimentPos ? "+" : ""}{sentimentPct}%
               </span>
@@ -394,6 +396,7 @@ export function ValuationEngineTab({ result }: ValuationEngineTabProps) {
           <div className="flex items-center gap-2 mb-4">
             <TrendingUp className="w-4 h-4 text-[#6B4E2E]" />
             <span className="text-sm font-medium text-[#6B4E2E]">AI Predicted Value</span>
+            <InfoTip text="The model's estimated market value after applying all feature adjustments. Uplift = positive drivers, Detractor = negative drivers on the price." />
           </div>
           <div className="text-6xl font-extrabold text-[#8A5B24] mb-3 leading-tight font-mono">
             {aiPredictedValue > 0 ? fmtK(aiPredictedValue) : "—"}
@@ -448,7 +451,7 @@ export function ValuationEngineTab({ result }: ValuationEngineTabProps) {
         {/* Header */}
         <div className="border-b border-[#E7E5E4] px-6 py-5 flex items-start justify-between">
           <div>
-            <h3 className="text-lg font-bold text-[#292524] mb-1">Price Discovery Waterfall</h3>
+            <h3 className="text-lg font-bold text-[#292524] mb-1 flex items-center">Price Discovery Waterfall<InfoTip text="Each bar shows how a specific feature adjusts the baseline price up or down. The final bar is the AI's estimated market value. Green = value-adding, red = value-reducing." /></h3>
             <p className="text-sm text-[#78716C]">Feature-by-feature impact on predicted closing price</p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
@@ -745,7 +748,7 @@ export function ValuationEngineTab({ result }: ValuationEngineTabProps) {
         {/* Feature Leverage — colorful bars */}
         <div className="bg-white border border-[#E7E5E4] rounded-2xl shadow-lg overflow-hidden">
           <div className="border-b border-[#E7E5E4] px-6 py-5">
-            <h3 className="text-lg font-bold text-[#292524] mb-1">Feature Leverage</h3>
+            <h3 className="text-lg font-bold text-[#292524] mb-1 flex items-center">Feature Leverage<InfoTip text="Which property attributes most influenced price predictions, derived from SHAP values. The longest bar = the strongest price driver in your dataset." /></h3>
             <p className="text-sm text-[#78716C]">Top price-driving characteristics</p>
           </div>
           <div className="p-6">
@@ -800,7 +803,7 @@ export function ValuationEngineTab({ result }: ValuationEngineTabProps) {
                   <TrendingUp className="w-4 h-4 text-white" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-[#292524]">Buy Signal Opportunities</h3>
+                  <h3 className="text-sm font-bold text-[#292524] flex items-center">Buy Signal Opportunities<InfoTip text="Properties where the AI's estimated value is significantly higher than the list price — potential undervalued acquisition targets." side="bottom" /></h3>
                   <p className="text-xs text-[#78716C]">Undervalued properties</p>
                 </div>
               </div>
@@ -837,7 +840,7 @@ export function ValuationEngineTab({ result }: ValuationEngineTabProps) {
                   <TrendingDown className="w-4 h-4 text-white" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-[#292524]">Risk Alerts</h3>
+                  <h3 className="text-sm font-bold text-[#292524] flex items-center">Risk Alerts<InfoTip text="Properties where the list price significantly exceeds the AI's valuation — potential overpricing risk for buyers or pricing pressure for sellers." side="bottom" /></h3>
                   <p className="text-xs text-[#78716C]">Overpriced properties</p>
                 </div>
               </div>

@@ -5,7 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table"
-import { Building2, Columns, TrendingUp, AlertTriangle, Search, TrendingDown } from "lucide-react"
+import { Building2, TrendingUp, AlertTriangle, Search, TrendingDown, BarChart2 } from "lucide-react"
+import { InfoTip } from "@/components/ui/info-tip"
 import { Input } from "@/components/ui/input"
 import type { TrainingResult } from "@/src/types"
 
@@ -19,9 +20,14 @@ export function MarketInventoryTab({ result }: MarketInventoryTabProps) {
   const dq = result.data_quality
   const arb = result.arbitrage
 
+  const avgDeltaPct = arb.valuation_delta_stats?.mean_delta_pct
+  const avgDeltaStr = avgDeltaPct != null
+    ? `${avgDeltaPct >= 0 ? "+" : ""}${avgDeltaPct.toFixed(1)}%`
+    : "N/A"
+
   const summaryCards = [
     { label: "Total Properties", value: dq.total_rows.toLocaleString(), icon: Building2, highlight: false },
-    { label: "Features Engineered", value: String(result.model_diagnostics.feature_engineering.total_features), icon: Columns, highlight: false },
+    { label: "Avg AI vs Market", value: avgDeltaStr, icon: BarChart2, highlight: false },
     { label: "Undervalued Signals", value: String(arb.undervalued_count), icon: TrendingUp, highlight: true },
     { label: "Overpriced Signals", value: String(arb.overpriced_count), icon: TrendingDown, highlight: false },
   ]
@@ -76,7 +82,7 @@ export function MarketInventoryTab({ result }: MarketInventoryTabProps) {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-lg font-semibold">Valuation Signals</CardTitle>
+              <CardTitle className="text-lg font-semibold flex items-center">Valuation Signals<InfoTip text="Properties where the gap between AI valuation and list price exceeds the model's typical error margin — flagged as actionable buy or risk signals." /></CardTitle>
               <p className="text-sm text-muted-foreground">
                 Properties flagged as undervalued or overpriced by the AI engine
               </p>

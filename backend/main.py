@@ -20,25 +20,70 @@ from fastapi import FastAPI, UploadFile, File, Form, BackgroundTasks, HTTPExcept
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, EmailStr
 from typing import Optional
 import pandas as pd
 import io
 import uuid
-import sqlite3
 import json
 import os
 import math
 import re
+import time
+import threading
+from collections import defaultdict
 from numbers import Real
 from datetime import datetime, timedelta
 from engine import train_logic, get_model_state
 from dotenv import load_dotenv
+import psycopg2
+import psycopg2.extras
 
 load_dotenv()
 
+# ─── Rate Limiter ──────────────────────────────────────────────────────────────
+# In-memory store: { ip: [(timestamp, ...), ...] }
+# 5 failed attempts per 15-minute window per IP.
+_RATE_LIMIT_MAX     = int(os.getenv("RATE_LIMIT_MAX", "5"))
+_RATE_LIMIT_WINDOW  = int(os.getenv("RATE_LIMIT_WINDOW_SEC", "900"))  # 15 min
+_rate_store: dict[str, list[float]] = defaultdict(list)
+_rate_lock = threading.Lock()
+
+def _get_client_ip(request: Request) -> str:
+    """Return real IP, respecting X-Forwarded-For for reverse proxies."""
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+def _check_rate_limit(ip: str):
+    """Raise 429 if this IP has exceeded the login attempt limit."""
+    now = time.time()
+    cutoff = now - _RATE_LIMIT_WINDOW
+    with _rate_lock:
+        # Evict old entries
+        _rate_store[ip] = [t for t in _rate_store[ip] if t > cutoff]
+        if len(_rate_store[ip]) >= _RATE_LIMIT_MAX:
+            retry_after = int(_RATE_LIMIT_WINDOW - (now - _rate_store[ip][0]))
+            raise HTTPException(
+                status_code=429,
+                detail=f"Too many attempts. Try again in {retry_after // 60} min {retry_after % 60} sec.",
+                headers={"Retry-After": str(retry_after)},
+            )
+
+def _record_failed_attempt(ip: str):
+    now = time.time()
+    with _rate_lock:
+        _rate_store[ip].append(now)
+
+def _clear_attempts(ip: str):
+    with _rate_lock:
+        _rate_store.pop(ip, None)
+
 # ─── Auth Configuration ────────────────────────────────────────────────────────
-JWT_SECRET = os.getenv("JWT_SECRET", "change-this-secret-in-production-please")
+JWT_SECRET = os.getenv("JWT_SECRET", "")
+if not JWT_SECRET:
+    raise RuntimeError("JWT_SECRET environment variable is not set. Add it to backend/.env")
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRY_HOURS = 8
 
@@ -82,36 +127,44 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(_bearer
 
 def init_users_db():
     with _db_connect() as conn:
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                id            INTEGER PRIMARY KEY AUTOINCREMENT,
-                email         TEXT    UNIQUE NOT NULL,
-                name          TEXT    NOT NULL,
-                hashed_password TEXT  NOT NULL,
-                role          TEXT    NOT NULL DEFAULT 'analyst',
-                created_at    TEXT    NOT NULL,
-                is_active     INTEGER NOT NULL DEFAULT 1
-            )
-        """)
+        with conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id              SERIAL PRIMARY KEY,
+                    email           TEXT   UNIQUE NOT NULL,
+                    name            TEXT   NOT NULL,
+                    hashed_password TEXT   NOT NULL,
+                    role            TEXT   NOT NULL DEFAULT 'analyst',
+                    created_at      TEXT   NOT NULL,
+                    is_active       INTEGER NOT NULL DEFAULT 1
+                )
+            """)
+        conn.commit()
     _seed_admin()
 
 def _seed_admin():
     """Create a default admin account on first run if no users exist."""
+    default_pw = os.getenv("ADMIN_DEFAULT_PASSWORD", "admin123")
     with _db_connect() as conn:
-        count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
-        if count == 0:
-            conn.execute(
-                "INSERT INTO users (email, name, hashed_password, role, created_at) VALUES (?,?,?,?,?)",
-                ("admin@estatevantage.com", "Admin", _hash_password("admin123"),
-                 "admin", datetime.utcnow().isoformat())
-            )
+        with conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM users")
+            count = cur.fetchone()[0]
+            if count == 0:
+                cur.execute(
+                    "INSERT INTO users (email, name, hashed_password, role, created_at) VALUES (%s,%s,%s,%s,%s)",
+                    ("admin@estatevantage.com", "Admin", _hash_password(default_pw),
+                     "admin", datetime.utcnow().isoformat())
+                )
+        conn.commit()
 
 def _get_user_by_email(email: str):
     with _db_connect() as conn:
-        row = conn.execute(
-            "SELECT id, email, name, hashed_password, role, is_active FROM users WHERE email = ?",
-            (email.lower().strip(),)
-        ).fetchone()
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, email, name, hashed_password, role, is_active FROM users WHERE email = %s",
+                (email.lower().strip(),)
+            )
+            row = cur.fetchone()
     if not row:
         return None
     return {"id": row[0], "email": row[1], "name": row[2],
@@ -205,10 +258,10 @@ app = FastAPI()
 
 
 class ScenarioSimulationRequest(BaseModel):
-    base_valuation: float = Field(..., gt=0)
+    base_valuation: float = Field(..., gt=0, lt=1_000_000_000)
     slider_value: float = Field(..., ge=0, le=100)
-    market_cycle: Optional[str] = None
-    renovation_package: str = "basic"
+    market_cycle: Optional[str] = Field(None, max_length=50)
+    renovation_package: str = Field("basic", pattern=r"^(basic|midrange|luxury|structural)$")
     forecast_horizon_months: int = Field(12, ge=1, le=240)
 
 
@@ -220,8 +273,6 @@ class ScenarioSimulationResponse(BaseModel):
     projectedProfit: float
 
 # ─── Configuration ─────────────────────────────────────────────────────────────
-DB_PATH = "results.db"
-
 # Minimum fraction of rows that must satisfy each column validation rule.
 # Defaults to 90 % — override with the SCHEMA_VALID_RATIO environment variable.
 SCHEMA_VALID_RATIO = float(os.getenv("SCHEMA_VALID_RATIO", "0.90"))
@@ -257,31 +308,33 @@ def _sanitize_for_json(value):
 
 
 def _db_connect():
-    """Open a WAL-mode SQLite connection.
-    WAL (Write-Ahead Logging) lets the frontend poll GET /results while the
-    background training task is writing, preventing "database is locked" errors.
-    timeout=30 gives writes extra time to complete under load.
-    """
-    conn = sqlite3.connect(DB_PATH, timeout=30)
-    conn.execute("PRAGMA journal_mode=WAL")
-    return conn
+    """Open a Postgres connection using DATABASE_URL from environment."""
+    db_url = os.getenv("DATABASE_URL", "")
+    if not db_url:
+        raise RuntimeError("DATABASE_URL environment variable is not set.")
+    return psycopg2.connect(db_url)
 
 
 def init_results_db():
-    """Create the training_results table if it does not already exist.
-    Called once at startup — safe to call on every restart.
-    """
+    """Create all application tables if they do not already exist."""
     with _db_connect() as conn:
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS training_results (
-                job_id TEXT PRIMARY KEY,
-                status TEXT NOT NULL,  -- "processing" | "completed" | "failed"
-                data   TEXT,           -- JSON-serialised result payload (nullable)
-                error  TEXT            -- Error message string (nullable)
-            )
-            """
-        )
+        with conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS training_results (
+                    job_id TEXT PRIMARY KEY,
+                    status TEXT NOT NULL,
+                    data   TEXT,
+                    error  TEXT
+                )
+            """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS model_store (
+                    job_id     TEXT PRIMARY KEY,
+                    model_data BYTEA NOT NULL,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                )
+            """)
+        conn.commit()
 
 
 def _read_uploaded_table(contents: bytes, filename: str):
@@ -446,25 +499,29 @@ def set_job_result(job_id: str, status: str, data=None, error: Optional[str] = N
     safe_data = _sanitize_for_json(data) if data is not None else None
     payload = json.dumps(safe_data) if safe_data is not None else None
     with _db_connect() as conn:
-        conn.execute(
-            """
-            INSERT INTO training_results (job_id, status, data, error)
-            VALUES (?, ?, ?, ?)
-            ON CONFLICT(job_id) DO UPDATE SET
-                status=excluded.status,
-                data=excluded.data,
-                error=excluded.error
-            """,
-            (job_id, status, payload, error)
-        )
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO training_results (job_id, status, data, error)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT(job_id) DO UPDATE SET
+                    status=EXCLUDED.status,
+                    data=EXCLUDED.data,
+                    error=EXCLUDED.error
+                """,
+                (job_id, status, payload, error)
+            )
+        conn.commit()
 
 
 def get_job_result(job_id: str):
     with _db_connect() as conn:
-        row = conn.execute(
-            "SELECT status, data, error FROM training_results WHERE job_id = ?",
-            (job_id,)
-        ).fetchone()
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT status, data, error FROM training_results WHERE job_id = %s",
+                (job_id,)
+            )
+            row = cur.fetchone()
 
     if not row:
         return {"status": "not_found"}
@@ -477,6 +534,43 @@ def get_job_result(job_id: str):
         response["error"] = error
     return response
 
+
+# ─── Model Persistence (Postgres) ─────────────────────────────────────────────
+
+def save_model_to_db(job_id: str, state: dict):
+    """Serialize model state and store in Postgres."""
+    try:
+        import joblib, io
+        buf = io.BytesIO()
+        joblib.dump(state, buf)
+        data = buf.getvalue()
+        with _db_connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO model_store (job_id, model_data)
+                    VALUES (%s, %s)
+                    ON CONFLICT (job_id) DO UPDATE SET model_data = EXCLUDED.model_data, created_at = NOW()
+                    """,
+                    (job_id, psycopg2.Binary(data))
+                )
+            conn.commit()
+    except Exception:
+        pass  # best-effort
+
+def load_model_from_db(job_id: str):
+    """Load model state from Postgres. Returns None if not found."""
+    try:
+        import joblib, io
+        with _db_connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT model_data FROM model_store WHERE job_id = %s", (job_id,))
+                row = cur.fetchone()
+        if not row:
+            return None
+        return joblib.load(io.BytesIO(bytes(row[0])))
+    except Exception:
+        return None
 
 # ─── Startup ───────────────────────────────────────────────────────────────────
 init_results_db()
@@ -494,21 +588,57 @@ app.add_middleware(
 
 # ─── Auth Endpoints ────────────────────────────────────────────────────────────
 
+_EMAIL_RE = re.compile(r"^[^@\s]{1,64}@[^@\s]{1,255}$")
+_SAFE_NAME_RE = re.compile(r"^[\w\s\-'.]{1,80}$")
+
 class LoginRequest(BaseModel):
-    email: str
-    password: str
+    email: str = Field(..., max_length=320)
+    password: str = Field(..., min_length=1, max_length=128)
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        v = v.strip().lower()
+        if not _EMAIL_RE.match(v):
+            raise ValueError("Invalid email address")
+        return v
 
 class RegisterRequest(BaseModel):
-    email: str
-    name: str
-    password: str
-    role: str = "analyst"
+    email: str = Field(..., max_length=320)
+    name: str  = Field(..., min_length=1, max_length=80)
+    password: str = Field(..., min_length=8, max_length=128)
+    role: str  = Field("analyst", pattern=r"^(analyst|admin)$")
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        v = v.strip().lower()
+        if not _EMAIL_RE.match(v):
+            raise ValueError("Invalid email address")
+        return v
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, v: str) -> str:
+        v = v.strip()
+        if not _SAFE_NAME_RE.match(v):
+            raise ValueError("Name contains invalid characters")
+        return v
+
+class ResetPasswordRequest(BaseModel):
+    new_password: str = Field(..., min_length=8, max_length=128)
 
 @app.post("/auth/login")
-async def login(payload: LoginRequest):
+async def login(payload: LoginRequest, request: Request):
+    ip = _get_client_ip(request)
+    _check_rate_limit(ip)
+
     user = _get_user_by_email(payload.email)
     if not user or not user["is_active"] or not _verify_password(payload.password, user["hashed_password"]):
+        _record_failed_attempt(ip)
         raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    _clear_attempts(ip)
     token = _create_token(user["id"], user["email"], user["role"])
     return {"access_token": token, "token_type": "bearer",
             "user": {"id": user["id"], "email": user["email"], "name": user["name"], "role": user["role"]}}
@@ -517,17 +647,17 @@ async def login(payload: LoginRequest):
 async def register(payload: RegisterRequest, current_user: dict = Depends(get_current_user)):
     if current_user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Only admins can create users")
-    if len(payload.password) < 6:
-        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
     try:
         with _db_connect() as conn:
-            conn.execute(
-                "INSERT INTO users (email, name, hashed_password, role, created_at) VALUES (?,?,?,?,?)",
-                (payload.email.lower().strip(), payload.name,
-                 _hash_password(payload.password), payload.role, datetime.utcnow().isoformat())
-            )
+            with conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO users (email, name, hashed_password, role, created_at) VALUES (%s,%s,%s,%s,%s)",
+                    (payload.email, payload.name,
+                     _hash_password(payload.password), payload.role, datetime.utcnow().isoformat())
+                )
+            conn.commit()
         return {"message": "User created successfully"}
-    except sqlite3.IntegrityError:
+    except psycopg2.errors.UniqueViolation:
         raise HTTPException(status_code=409, detail="Email already registered")
 
 @app.get("/auth/me")
@@ -539,9 +669,9 @@ async def list_users(current_user: dict = Depends(get_current_user)):
     if current_user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Admins only")
     with _db_connect() as conn:
-        rows = conn.execute(
-            "SELECT id, email, name, role, created_at, is_active FROM users ORDER BY created_at DESC"
-        ).fetchall()
+        with conn.cursor() as cur:
+            cur.execute("SELECT id, email, name, role, created_at, is_active FROM users ORDER BY created_at DESC")
+            rows = cur.fetchall()
     return [{"id": r[0], "email": r[1], "name": r[2], "role": r[3],
              "created_at": r[4], "is_active": bool(r[5])} for r in rows]
 
@@ -552,7 +682,9 @@ async def delete_user(user_id: int, current_user: dict = Depends(get_current_use
     if str(user_id) == current_user.get("sub"):
         raise HTTPException(status_code=400, detail="Cannot delete your own account")
     with _db_connect() as conn:
-        conn.execute("UPDATE users SET is_active = 0 WHERE id = ?", (user_id,))
+        with conn.cursor() as cur:
+            cur.execute("UPDATE users SET is_active = 0 WHERE id = %s", (user_id,))
+        conn.commit()
     return {"message": "User deactivated"}
 
 @app.patch("/auth/users/{user_id}/reactivate")
@@ -560,24 +692,28 @@ async def reactivate_user(user_id: int, current_user: dict = Depends(get_current
     if current_user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Admins only")
     with _db_connect() as conn:
-        conn.execute("UPDATE users SET is_active = 1 WHERE id = ?", (user_id,))
+        with conn.cursor() as cur:
+            cur.execute("UPDATE users SET is_active = 1 WHERE id = %s", (user_id,))
+        conn.commit()
     return {"message": "User reactivated"}
-
-class ResetPasswordRequest(BaseModel):
-    new_password: str
 
 @app.patch("/auth/users/{user_id}/password")
 async def reset_password(user_id: int, payload: ResetPasswordRequest, current_user: dict = Depends(get_current_user)):
     if current_user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Admins only")
-    if len(payload.new_password) < 6:
-        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    if len(payload.new_password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
     with _db_connect() as conn:
-        conn.execute("UPDATE users SET hashed_password = ? WHERE id = ?",
-                     (_hash_password(payload.new_password), user_id))
+        with conn.cursor() as cur:
+            cur.execute("UPDATE users SET hashed_password = %s WHERE id = %s",
+                        (_hash_password(payload.new_password), user_id))
+        conn.commit()
     return {"message": "Password updated"}
 
 # ─── Endpoints ─────────────────────────────────────────────────────────────────
+
+_ALLOWED_TARGETS = {"Closing_Price"}
+_ALLOWED_FILE_TYPES = {".csv", ".xlsx", ".xls", ".txt"}
 
 @app.post("/train")
 async def start_training(
@@ -588,6 +724,18 @@ async def start_training(
     column_mapping: Optional[str] = Form(None),
     _user: dict = Depends(get_current_user),
 ):
+    # Input validation on form fields
+    if target.strip() not in _ALLOWED_TARGETS:
+        return JSONResponse(status_code=400, content={"status": "failed", "error": f"Invalid target column. Allowed: {_ALLOWED_TARGETS}"})
+    if not (1 <= horizon <= 1825):
+        return JSONResponse(status_code=400, content={"status": "failed", "error": "Horizon must be between 1 and 1825 days."})
+    if file.filename:
+        ext = os.path.splitext(file.filename.lower())[1]
+        if ext not in _ALLOWED_FILE_TYPES:
+            return JSONResponse(status_code=400, content={"status": "failed", "error": f"Unsupported file type '{ext}'. Allowed: {', '.join(_ALLOWED_FILE_TYPES)}"})
+    if column_mapping and len(column_mapping) > 50_000:
+        return JSONResponse(status_code=400, content={"status": "failed", "error": "column_mapping payload too large."})
+
     try:
         job_id = str(uuid.uuid4())
         set_job_result(job_id, "processing")
@@ -652,6 +800,11 @@ def run_and_store(job_id, df, target, horizon):
     try:
         result = train_logic(df, target, horizon, job_id=job_id)
         set_job_result(job_id, "completed", data=result)
+        # Persist model to Postgres so it survives server restarts/redeploys
+        from engine import get_model_state
+        state = get_model_state(job_id)
+        if state:
+            save_model_to_db(job_id, state)
     except Exception as e:
         set_job_result(job_id, "failed", error=str(e))
 
@@ -719,19 +872,22 @@ async def simulate_scenario(payload: ScenarioSimulationRequest, _user: dict = De
 # ─── Single-property prediction ────────────────────────────────────────────────
 
 class PredictRequest(BaseModel):
-    sq_ft_total: float
-    bedrooms: Optional[float] = None
-    bathrooms: Optional[float] = None
-    condition_score: Optional[float] = None
-    zip_code: Optional[str] = None
-    property_type: Optional[str] = None
+    sq_ft_total: float    = Field(..., gt=0, lt=100_000)
+    bedrooms: Optional[float]       = Field(None, ge=0, le=100)
+    bathrooms: Optional[float]      = Field(None, ge=0, le=50)
+    condition_score: Optional[float] = Field(None, ge=1, le=10)
+    zip_code: Optional[str]         = Field(None, max_length=20, pattern=r"^[\w\s\-]+$")
+    property_type: Optional[str]    = Field(None, max_length=50, pattern=r"^[\w\s\-]+$")
 
 
 @app.post("/predict/{job_id}")
 async def predict_single(job_id: str, payload: PredictRequest, _user: dict = Depends(get_current_user)):
     state = get_model_state(job_id)
     if state is None:
-        raise HTTPException(status_code=404, detail="Model not found. The server may have restarted — please re-train.")
+        # Disk miss — try loading from Postgres (survives redeploys)
+        state = load_model_from_db(job_id)
+    if state is None:
+        raise HTTPException(status_code=404, detail="Model not found. Please re-train.")
 
     model    = state["model"]
     scaler   = state["scaler"]
@@ -769,6 +925,23 @@ async def predict_single(job_id: str, payload: PredictRequest, _user: dict = Dep
 
 # ─── Gemini Health Check ───────────────────────────────────────────────────────
 
+@app.get("/health")
+async def health():
+    """Health check for cloud platforms (no auth required)."""
+    try:
+        with _db_connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1")
+        db_ok = True
+    except Exception:
+        db_ok = False
+    return {
+        "status": "ok" if db_ok else "degraded",
+        "database": "connected" if db_ok else "unreachable",
+        "groq": "configured" if GROQ_API_KEY else "missing",
+    }
+
+
 @app.get("/test-ai")
 async def test_ai(_user: dict = Depends(get_current_user)):
     """Quick endpoint to verify Groq is reachable. Visit http://localhost:8000/test-ai in browser."""
@@ -786,7 +959,11 @@ async def test_ai(_user: dict = Depends(get_current_user)):
 
 @app.post("/map-columns")
 async def map_columns(file: UploadFile = File(...), _user: dict = Depends(get_current_user)):
-    """Use Gemini to intelligently map arbitrary CSV columns to the required schema."""
+    """Use Groq to intelligently map arbitrary CSV columns to the required schema."""
+    if file.filename:
+        ext = os.path.splitext(file.filename.lower())[1]
+        if ext not in _ALLOWED_FILE_TYPES:
+            return JSONResponse(status_code=400, content={"error": f"Unsupported file type '{ext}'."})
     gemini = _get_gemini()
     if not gemini:
         return JSONResponse(

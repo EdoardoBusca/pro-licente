@@ -29,7 +29,7 @@ type AppState = "landing" | "loading" | "dashboard"
 export default function App() {
   // Always start with safe server-side defaults — load from storage after mount
   const [appState,  setAppState]  = useState<AppState>("landing")
-  const [activeTab, setActiveTab] = useState("model-stats")
+  const [activeTab, setActiveTab] = useState("valuation-engine")
   const [sidebarOpen, setSidebarOpen] = useState(true)
 
   // Training state
@@ -375,14 +375,11 @@ export default function App() {
         <div className="flex-1 p-8 overflow-auto">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <TabsList className="mb-6 bg-card border border-border p-1.5 rounded-xl h-auto">
-              <TabsTrigger value="model-stats" className="gap-2 px-4 py-2.5 rounded-lg data-[state=active]:bg-foreground data-[state=active]:text-background data-[state=active]:shadow-sm transition-all">
-                <BarChart3 className="w-4 h-4" /> Model Stats
-              </TabsTrigger>
               <TabsTrigger value="valuation-engine" className="gap-2 px-4 py-2.5 rounded-lg data-[state=active]:bg-foreground data-[state=active]:text-background data-[state=active]:shadow-sm transition-all">
-                <Settings2 className="w-4 h-4" /> Valuation Engine
+                <Settings2 className="w-4 h-4" /> Price Discovery
               </TabsTrigger>
               <TabsTrigger value="market-dynamics" className="gap-2 px-4 py-2.5 rounded-lg data-[state=active]:bg-foreground data-[state=active]:text-background data-[state=active]:shadow-sm transition-all">
-                <Activity className="w-4 h-4" /> Market Dynamics
+                <Activity className="w-4 h-4" /> Market Intelligence
               </TabsTrigger>
               <TabsTrigger value="market-inventory" className="gap-2 px-4 py-2.5 rounded-lg data-[state=active]:bg-foreground data-[state=active]:text-background data-[state=active]:shadow-sm transition-all">
                 <Building2 className="w-4 h-4" /> Market Inventory
@@ -396,20 +393,19 @@ export default function App() {
               <TabsTrigger value="cash-flow" className="gap-2 px-4 py-2.5 rounded-lg data-[state=active]:bg-foreground data-[state=active]:text-background data-[state=active]:shadow-sm transition-all">
                 <TrendingUp className="w-4 h-4" /> Cash Flow
               </TabsTrigger>
+              <TabsTrigger value="model-stats" className="gap-2 px-4 py-2.5 rounded-lg data-[state=active]:bg-foreground data-[state=active]:text-background data-[state=active]:shadow-sm transition-all">
+                <BarChart3 className="w-4 h-4" /> Model Report
+              </TabsTrigger>
             </TabsList>
 
-            <TabsContent value="model-stats" className="mt-0 animate-in fade-in-0 slide-in-from-bottom-4 duration-300">
-              {result ? <ModelStatsTab result={result} /> : <LockedState icon={<BarChart3 className="w-6 h-6" />} label="Model Stats" />}
-            </TabsContent>
-
             <TabsContent value="valuation-engine" className="mt-0 animate-in fade-in-0 slide-in-from-bottom-4 duration-300">
-              {result ? <ValuationEngineTab result={result} /> : <LockedState icon={<Settings2 className="w-6 h-6" />} label="Valuation Engine" />}
+              {result ? <ValuationEngineTab result={result} /> : <LockedState icon={<Settings2 className="w-6 h-6" />} label="Price Discovery" />}
             </TabsContent>
 
             <TabsContent value="market-dynamics" className="mt-0 animate-in fade-in-0 slide-in-from-bottom-4 duration-300">
               {result
                 ? <MarketDynamicsTab result={result} onSliderChange={handleMarketScenarioChange} />
-                : <LockedState icon={<Activity className="w-6 h-6" />} label="Market Dynamics" />}
+                : <LockedState icon={<Activity className="w-6 h-6" />} label="Market Intelligence" />}
             </TabsContent>
 
             <TabsContent value="market-inventory" className="mt-0 animate-in fade-in-0 slide-in-from-bottom-4 duration-300">
@@ -432,6 +428,10 @@ export default function App() {
               {result
                 ? <CashFlowTab result={result} />
                 : <LockedState icon={<TrendingUp className="w-6 h-6" />} label="Cash Flow & Returns" />}
+            </TabsContent>
+
+            <TabsContent value="model-stats" className="mt-0 animate-in fade-in-0 slide-in-from-bottom-4 duration-300">
+              {result ? <ModelStatsTab result={result} /> : <LockedState icon={<BarChart3 className="w-6 h-6" />} label="Model Report" />}
             </TabsContent>
           </Tabs>
         </div>

@@ -5,7 +5,9 @@ import {
   DollarSign, Percent, Home, TrendingUp, ShieldCheck,
   AlertTriangle, CheckCircle2, Info, Calculator,
 } from "lucide-react"
+import { InfoTip } from "@/components/ui/info-tip"
 import type { TrainingResult } from "@/src/types"
+import { calcMortgage, getDefaultPrice } from "@/src/finance"
 
 interface InvestmentCalculatorTabProps {
   result: TrainingResult
@@ -15,23 +17,6 @@ const fmt = (n: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n)
 
 const fmtPct = (n: number, decimals = 2) => `${n.toFixed(decimals)}%`
-
-function getDefaultPrice(result: TrainingResult): number {
-  const fromDiscovery = result.market_dynamics?.price_discovery?.find((d) => d.kind === "final")?.change
-  if (fromDiscovery && fromDiscovery > 0) return Math.round(fromDiscovery)
-  const fromProjection = result.projection?.[result.projection.length - 1]?.val
-  if (fromProjection && fromProjection > 0) return Math.round(fromProjection)
-  const fromArbitrage = result.arbitrage?.buy_signals?.[0]?.ai_value
-  if (fromArbitrage && fromArbitrage > 0) return Math.round(fromArbitrage)
-  return 450000
-}
-
-function calcMortgage(principal: number, annualRate: number, termYears: number): number {
-  if (annualRate === 0) return principal / (termYears * 12)
-  const r = annualRate / 100 / 12
-  const n = termYears * 12
-  return (principal * r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1)
-}
 
 type DealRating = { label: string; color: string; bg: string; icon: typeof CheckCircle2 }
 
@@ -89,12 +74,16 @@ interface MetricCardProps {
   sub?: string
   accent?: string
   bg?: string
+  tip?: string
 }
 
-function MetricCard({ label, value, sub, accent = "#0F172A", bg = "#F8FAFC" }: MetricCardProps) {
+function MetricCard({ label, value, sub, accent = "#0F172A", bg = "#F8FAFC", tip }: MetricCardProps) {
   return (
     <div className="rounded-xl border border-gray-100 p-5" style={{ background: bg }}>
-      <p className="text-xs uppercase tracking-wide text-[#64748B]">{label}</p>
+      <p className="text-xs uppercase tracking-wide text-[#64748B] flex items-center">
+        {label}
+        {tip && <InfoTip text={tip} side="bottom" />}
+      </p>
       <p className="text-2xl font-bold mt-1.5" style={{ color: accent }}>{value}</p>
       {sub && <p className="text-xs text-[#94A3B8] mt-1">{sub}</p>}
     </div>
@@ -160,15 +149,15 @@ export function InvestmentCalculatorTab({ result }: InvestmentCalculatorTabProps
         </div>
         <div className="flex gap-6 text-sm">
           <div className="text-center">
-            <p className="text-xs uppercase tracking-wide" style={{ color: rating.color + "88" }}>Cap Rate</p>
+            <p className="text-xs uppercase tracking-wide flex items-center" style={{ color: rating.color + "88" }}>Cap Rate<InfoTip text="Net Operating Income ÷ Purchase Price. Measures property yield independent of financing. Target ≥ 8% for investment properties." /></p>
             <p className="font-bold text-lg" style={{ color: rating.color }}>{fmtPct(metrics.capRate)}</p>
           </div>
           <div className="text-center">
-            <p className="text-xs uppercase tracking-wide" style={{ color: rating.color + "88" }}>CoC Return</p>
+            <p className="text-xs uppercase tracking-wide flex items-center" style={{ color: rating.color + "88" }}>CoC Return<InfoTip text="Cash-on-Cash: annual cash flow ÷ down payment. Return on your actual cash invested. Target ≥ 10%." /></p>
             <p className="font-bold text-lg" style={{ color: rating.color }}>{fmtPct(metrics.coc)}</p>
           </div>
           <div className="text-center">
-            <p className="text-xs uppercase tracking-wide" style={{ color: rating.color + "88" }}>DSCR</p>
+            <p className="text-xs uppercase tracking-wide flex items-center" style={{ color: rating.color + "88" }}>DSCR<InfoTip text="Debt Service Coverage Ratio: NOI ÷ annual mortgage payments. Most lenders require ≥ 1.25 for investment loans. Below 1.0 means rent doesn't cover the mortgage." /></p>
             <p className="font-bold text-lg" style={{ color: rating.color }}>{metrics.dscr.toFixed(2)}x</p>
           </div>
         </div>
@@ -233,8 +222,8 @@ export function InvestmentCalculatorTab({ result }: InvestmentCalculatorTabProps
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <MetricCard label="Monthly Payment" value={fmt(metrics.monthlyMortgage)} sub="P&I only" accent="#3B82F6" bg="#EFF6FF" />
               <MetricCard label="Monthly Cash Flow" value={fmt(metrics.annualCashFlow / 12)} sub="After all costs" accent={metrics.annualCashFlow >= 0 ? "#166534" : "#991B1B"} bg={metrics.annualCashFlow >= 0 ? "#f0fdf4" : "#fef2f2"} />
-              <MetricCard label="Annual NOI" value={fmt(metrics.noi)} sub="Before debt service" accent="#0F172A" />
-              <MetricCard label="Break-even Rent" value={fmt(metrics.breakEvenRent)} sub="Required gross rent (vacancy-adjusted)" accent="#78350F" bg="#fef9ee" />
+              <MetricCard label="Annual NOI" value={fmt(metrics.noi)} sub="Before debt service" accent="#0F172A" tip="Net Operating Income: effective gross income minus operating expenses, before mortgage payments." />
+              <MetricCard label="Break-even Rent" value={fmt(metrics.breakEvenRent)} sub="Required gross rent (vacancy-adjusted)" accent="#78350F" bg="#fef9ee" tip="Minimum monthly rent to cover all costs at your vacancy rate. Your actual rent must exceed this to generate positive cash flow." />
             </div>
           </section>
 
@@ -288,7 +277,7 @@ export function InvestmentCalculatorTab({ result }: InvestmentCalculatorTabProps
               </div>
 
               <div className="rounded-xl border border-gray-100 bg-[#F8FAFC] p-4">
-                <p className="text-xs uppercase tracking-wide text-[#64748B] mb-2">Gross Rent Multiplier</p>
+                <p className="text-xs uppercase tracking-wide text-[#64748B] mb-2 flex items-center">Gross Rent Multiplier<InfoTip text="Purchase Price ÷ Annual Gross Rent. Quick cross-market comparison tool. Target &lt; 12x — lower means better rent-to-price ratio." side="bottom" /></p>
                 <p className="text-2xl font-bold text-[#0F172A]">{metrics.grm.toFixed(1)}x</p>
                 <p className="text-xs text-[#94A3B8] mt-1.5">Lower is better (target: &lt; 12x)</p>
               </div>

@@ -22,3 +22,5 @@ backend/models/*
 # Node / React
 node_modules/
 dist/
+.next/
+frontend/.env.local

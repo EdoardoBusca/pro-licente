@@ -72,7 +72,14 @@ export default function AdminPage() {
         body: JSON.stringify(form),
       })
       const data = await res.json()
-      if (!res.ok) { setFormError(data.detail ?? "Failed to create user"); return }
+      if (!res.ok) {
+        const detail = data.detail
+        const msg = Array.isArray(detail)
+          ? detail.map((e: { msg?: string }) => e.msg ?? JSON.stringify(e)).join(", ")
+          : typeof detail === "string" ? detail : "Failed to create user"
+        setFormError(msg)
+        return
+      }
       setForm({ name: "", email: "", password: "", role: "analyst" })
       showToast("User created successfully")
       fetchUsers()
@@ -100,7 +107,7 @@ export default function AdminPage() {
   }
 
   async function handleResetPassword(id: number) {
-    if (!resetPw || resetPw.length < 6) return
+    if (!resetPw || resetPw.length < 8) return
     setResetLoading(true)
     const res = await fetch(`${API}/auth/users/${id}/password`, {
       method: "PATCH",
@@ -255,7 +262,7 @@ export default function AdminPage() {
                     type="password"
                     value={resetPw}
                     onChange={(e) => setResetPw(e.target.value)}
-                    placeholder="New password (min 6 chars)"
+                    placeholder="New password (min 8 chars)"
                     className="flex-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#0F172A]"
                   />
                   <button
@@ -307,9 +314,9 @@ export default function AdminPage() {
                     type={showPassword ? "text" : "password"}
                     value={form.password}
                     onChange={(e) => setForm(f => ({ ...f, password: e.target.value }))}
-                    placeholder="Min 6 characters"
+                    placeholder="Min 8 characters"
                     required
-                    minLength={6}
+                    minLength={8}
                     className="flex-1 bg-transparent px-3 py-2.5 text-sm text-[#0F172A] outline-none"
                   />
                   <button type="button" onClick={() => setShowPassword(v => !v)}

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import { TrendingUp, Activity, Info, Zap, Target } from "lucide-react"
 import type { TrainingResult } from "@/src/types"
 import { getMarketIntelligence } from "@/src/api"
+import { InfoTip } from "@/components/ui/info-tip"
 
 type RenovationPackage = "basic" | "midrange" | "luxury" | "structural"
 
@@ -30,12 +31,6 @@ interface MarketData {
     label: string
     estLiftPct: number
   }[]
-  macroFactors: {
-    id: string
-    name: string
-    lagDays: number
-    correlation: number
-  }[]
   marketSummary: string
   baseValuation: number
   liquidity: {
@@ -53,7 +48,6 @@ interface AiSignal {
 }
 
 const ROI_ICONS = [Zap, Target, TrendingUp, Activity] as const
-const FACTOR_NAMES = ["Demand Momentum", "Liquidity Pulse", "Pricing Drift"]
 
 const RENOVATION_PACKAGES: Record<RenovationPackage, {
   label: string
@@ -77,17 +71,9 @@ function useMarketDynamics(result: TrainingResult): MarketData {
       estLiftPct: Number(row.sales_lift ?? 0),
     }))
 
-    const factors = (result.market_dynamics?.lead_lag ?? []).slice(0, 3).map((row, index) => ({
-      id: `macro-${index}`,
-      name: FACTOR_NAMES[index] ?? `Macro Factor ${index + 1}`,
-      lagDays: Number(row.lag ?? 0),
-      correlation: Number(row.correlation ?? 0),
-    }))
-
     const baseValuation = Number(
       result.market_dynamics?.price_discovery?.find((d) => d.kind === "final")?.change
       ?? result.projection?.[result.projection.length - 1]?.val
-      ?? result.avg_price
       ?? 0,
     )
 
@@ -102,7 +88,6 @@ function useMarketDynamics(result: TrainingResult): MarketData {
 
     return {
       roiSynergies: synergies,
-      macroFactors: factors,
       marketSummary: summaryText,
       baseValuation,
       liquidity,
@@ -127,17 +112,35 @@ export function MarketDynamicsTab({ result, onSliderChange }: MarketDynamicsTabP
   useEffect(() => {
     setSignalsLoading(true)
     const md = result.market_dynamics
+    const yoyMetrics = md?.temporal_analysis?.yoy_appreciation_metrics ?? []
+    const avgYoy = yoyMetrics.length > 0
+      ? yoyMetrics.reduce((sum, m) => sum + Number(m.yoy_appreciation ?? 0), 0) / yoyMetrics.length
+      : 0
+    const corrKeys = Object.keys(result.correlation_lookup ?? {})
+    const locations = corrKeys
+      .filter((k) => k.startsWith("Zip_Code_"))
+      .map((k) => k.replace("Zip_Code_", ""))
+      .slice(0, 8)
+    const propertyTypes = corrKeys
+      .filter((k) => k.startsWith("Property_Type_"))
+      .map((k) => k.replace("Property_Type_", ""))
+      .slice(0, 6)
+    const avgPrice = Number(
+      md?.price_discovery?.find((d) => d.kind === "final")?.change
+      ?? result.projection?.[result.projection.length - 1]?.val
+      ?? 0,
+    )
     getMarketIntelligence({
       market_cycle: md?.temporal_analysis?.market_cycle ?? "Balanced",
-      yoy_appreciation: Number(md?.temporal_analysis?.yoy_appreciation ?? 0),
+      yoy_appreciation: avgYoy,
       liquidity_score: Number(md?.sales_velocity?.liquidity_score ?? 0),
-      avg_price: Number(result.avg_price ?? 0),
-      locations: result.top_zip_codes ?? [],
-      property_types: result.property_type_distribution ? Object.keys(result.property_type_distribution) : [],
-      total_rows: Number(result.total_rows ?? 0),
+      avg_price: avgPrice,
+      locations,
+      property_types: propertyTypes,
+      total_rows: Number(result.data_quality?.total_rows ?? 0),
       expected_days_to_sell: md?.sales_velocity?.expected_days_to_sell ?? null,
       mape: Number(result.mape ?? 0),
-      r2: Number(result.r2 ?? 0),
+      r2: Number(result.r2_score ?? 0),
     })
       .then((data: { signals?: AiSignal[] }) => { if (data?.signals) setAiSignals(data.signals) })
       .catch(() => {})
@@ -199,11 +202,11 @@ export function MarketDynamicsTab({ result, onSliderChange }: MarketDynamicsTabP
           </div>
           <div className="grid grid-cols-2 gap-4 w-full md:w-auto">
             <div className="rounded-lg border border-gray-100 bg-[#F8FAFC] px-4 py-3 min-w-[170px]">
-              <p className="text-xs uppercase tracking-wide text-[#64748B]">Liquidity Score</p>
+              <p className="text-xs uppercase tracking-wide text-[#64748B] flex items-center">Liquidity Score<InfoTip text="How quickly properties sell in this market, scored 1–99. Higher = more buyer competition and faster absorption. Derived from days-on-market data in your dataset." /></p>
               <p className="text-3xl font-bold text-[#0F172A] mt-1">{market.liquidity.score}</p>
             </div>
             <div className="rounded-lg border border-gray-100 bg-[#F8FAFC] px-4 py-3 min-w-[170px]">
-              <p className="text-xs uppercase tracking-wide text-[#64748B]">Expected Time to Sale</p>
+              <p className="text-xs uppercase tracking-wide text-[#64748B] flex items-center">Expected Time to Sale<InfoTip text="AI estimate of days from listing to contract, based on historical sales velocity patterns in your dataset." /></p>
               <p className="text-2xl font-semibold text-[#0F172A] mt-1">
                 {market.liquidity.expectedDaysToSell !== null ? `${market.liquidity.expectedDaysToSell} days` : "N/A"}
               </p>
@@ -216,7 +219,7 @@ export function MarketDynamicsTab({ result, onSliderChange }: MarketDynamicsTabP
       <section className="space-y-4">
         <div className="flex items-center gap-2">
           <TrendingUp className="w-5 h-5 text-[#334155]" />
-          <h3 className="text-lg font-semibold text-[#0F172A]">ROI Enhancement Opportunities</h3>
+          <h3 className="text-lg font-semibold text-[#0F172A] flex items-center">ROI Enhancement Opportunities<InfoTip text="Feature combinations (e.g. location × bedroom count) that historically correlate with above-average sale prices in your dataset. The % lift is the estimated price premium." /></h3>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
           {market.roiSynergies.length > 0 ? market.roiSynergies.map((item, index) => {
@@ -247,7 +250,7 @@ export function MarketDynamicsTab({ result, onSliderChange }: MarketDynamicsTabP
       <section className="rounded-xl border border-gray-100 bg-white p-6 shadow-[0_2px_10px_rgba(15,23,42,0.04)]">
         <div className="flex items-center gap-2 mb-5">
           <Activity className="w-5 h-5 text-[#334155]" />
-          <h3 className="text-lg font-semibold text-[#0F172A]">Lead-Lag Market Intelligence</h3>
+          <h3 className="text-lg font-semibold text-[#0F172A] flex items-center">Lead-Lag Market Intelligence<InfoTip text="Economic and behavioural signals that tend to move before property prices change. Lag days = how far ahead this signal predicts. Generated by AI from your dataset context." /></h3>
           <span className="ml-auto text-xs text-[#94A3B8] flex items-center gap-1">AI-generated</span>
         </div>
         <div className="space-y-4">
@@ -290,7 +293,7 @@ export function MarketDynamicsTab({ result, onSliderChange }: MarketDynamicsTabP
 
       {/* Section C: Scenario Simulator */}
       <section className="rounded-xl border border-[#FDE68A] bg-gradient-to-br from-[#FFF9E8] to-[#FFF4CC] p-6 shadow-[0_4px_14px_rgba(146,64,14,0.08)]">
-        <h3 className="text-lg font-semibold text-[#78350F] mb-5">Scenario Simulator</h3>
+        <h3 className="text-lg font-semibold text-[#78350F] mb-5 flex items-center">Scenario Simulator<InfoTip text="Adjust renovation spend and market conditions to model how they affect expected property value. Drag the slider from Conservative to Aggressive to simulate different market stances." /></h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wide text-[#92400E] mb-1.5">
