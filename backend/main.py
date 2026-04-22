@@ -920,7 +920,10 @@ async def predict_single(job_id: str, payload: PredictRequest, _user: dict = Dep
     X_input = pd.DataFrame([row], columns=features)
     X_scaled = scaler.transform(X_input)
     prediction = float(model.predict(X_scaled)[0])
-    return {"predicted_price": round(prediction, 2)}
+    numeric_inputs = {col: row[col] for col in features if not any(
+        col.startswith(p) for p in ("Zip_Code_", "Property_Type_")
+    )}
+    return {"predicted_price": round(prediction, 2), "debug_inputs": numeric_inputs}
 
 
 # ─── Gemini Health Check ───────────────────────────────────────────────────────

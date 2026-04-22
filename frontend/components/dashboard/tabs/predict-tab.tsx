@@ -25,6 +25,8 @@ export function PredictTab({ jobId, result }: PredictTabProps) {
   const [loading,      setLoading]      = useState(false)
   const [error,        setError]        = useState<string | null>(null)
 
+  const resetResult = () => { setPrediction(null); setError(null) }
+
   const [availableZips, availablePropTypes] = useMemo(() => {
     const keys = Object.keys(result.correlation_lookup)
     return [
@@ -47,6 +49,7 @@ export function PredictTab({ jobId, result }: PredictTabProps) {
         zip_code:        zipCode      || undefined,
         property_type:   propertyType || undefined,
       })
+      console.log("[predict] feature inputs sent to model:", res.debug_inputs)
       setPrediction(res.predicted_price)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Prediction failed")
@@ -75,28 +78,28 @@ export function PredictTab({ jobId, result }: PredictTabProps) {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label htmlFor="sqft">Sq Ft Total *</Label>
-              <Input id="sqft" type="number" placeholder="e.g. 1500" value={sqFt}
-                onChange={(e) => setSqFt(e.target.value)} />
+              <Input id="sqft" type="number" min="1" placeholder="e.g. 1500" value={sqFt}
+                onChange={(e) => { setSqFt(e.target.value); resetResult() }} />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="cond">Condition Score (1–10)</Label>
               <Input id="cond" type="number" min="1" max="10" placeholder="e.g. 7" value={condScore}
-                onChange={(e) => setCondScore(e.target.value)} />
+                onChange={(e) => { setCondScore(e.target.value); resetResult() }} />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="beds">Bedrooms</Label>
-              <Input id="beds" type="number" placeholder="e.g. 3" value={bedrooms}
-                onChange={(e) => setBedrooms(e.target.value)} />
+              <Input id="beds" type="number" min="0" placeholder="e.g. 3" value={bedrooms}
+                onChange={(e) => { setBedrooms(e.target.value); resetResult() }} />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="baths">Bathrooms</Label>
-              <Input id="baths" type="number" placeholder="e.g. 2" value={bathrooms}
-                onChange={(e) => setBathrooms(e.target.value)} />
+              <Input id="baths" type="number" min="0" placeholder="e.g. 2" value={bathrooms}
+                onChange={(e) => { setBathrooms(e.target.value); resetResult() }} />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="zip">Zip Code</Label>
               <Input id="zip" placeholder="e.g. 10001" value={zipCode}
-                onChange={(e) => setZipCode(e.target.value)} list="zip-options" />
+                onChange={(e) => { setZipCode(e.target.value); resetResult() }} list="zip-options" />
               <datalist id="zip-options">
                 {availableZips.map((z) => <option key={z} value={z} />)}
               </datalist>
@@ -104,7 +107,7 @@ export function PredictTab({ jobId, result }: PredictTabProps) {
             <div className="space-y-1.5">
               <Label htmlFor="ptype">Property Type</Label>
               <Input id="ptype" placeholder="e.g. Condo" value={propertyType}
-                onChange={(e) => setPropertyType(e.target.value)} list="ptype-options" />
+                onChange={(e) => { setPropertyType(e.target.value); resetResult() }} list="ptype-options" />
               <datalist id="ptype-options">
                 {availablePropTypes.map((t) => <option key={t} value={t} />)}
               </datalist>
