@@ -12,6 +12,7 @@ import { MarketInventoryTab } from "@/components/dashboard/tabs/market-inventory
 import { PredictTab } from "@/components/dashboard/tabs/predict-tab"
 import { InvestmentCalculatorTab } from "@/components/dashboard/tabs/investment-calculator"
 import { CashFlowTab } from "@/components/dashboard/tabs/cash-flow"
+import { PriceAnalysisTab } from "@/components/dashboard/tabs/price-analysis"
 import { ColumnMapper } from "@/components/dashboard/column-mapper"
 import { AiAdvicePanel } from "@/components/dashboard/ai-advice-panel"
 import {
@@ -25,6 +26,29 @@ import type { TrainingResult, ColumnMappingResult } from "@/src/types"
 import type { ConfirmedMapping } from "@/components/dashboard/column-mapper"
 
 type AppState = "landing" | "loading" | "dashboard"
+
+// Parse column headers from a CSV/XLSX file in the browser without a library.
+// Used as a fallback when the backend is unreachable so the mapper dropdowns
+// always have options to choose from.
+async function readFileCsvHeaders(file: File): Promise<string[]> {
+  return new Promise((resolve) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      try {
+        const text = (e.target?.result as string) ?? ""
+        const firstLine = text.split(/\r?\n/)[0] ?? ""
+        // Handle quoted fields: split on commas not inside quotes
+        const cols = firstLine.match(/("(?:[^"]|"")*"|[^,]*)/g) ?? []
+        resolve(cols.map((c) => c.replace(/^"|"$/g, "").trim()).filter(Boolean))
+      } catch {
+        resolve([])
+      }
+    }
+    reader.onerror = () => resolve([])
+    // Read first 8KB — enough to get headers without loading the whole file
+    reader.readAsText(file.slice(0, 8192))
+  })
+}
 
 export default function App() {
   // Always start with safe server-side defaults — load from storage after mount
@@ -113,7 +137,7 @@ export default function App() {
     sessionStorage.removeItem("ev-job-id")
   }, [])
 
-  // When a file is selected, call Gemini to map columns — always show the modal
+  // When a file is selected, call AI to map columns — always show the modal
   const handleFileChange = useCallback(async (f: File | null) => {
     setFile(f)
     setMappingResult(null)
@@ -123,16 +147,14 @@ export default function App() {
     setIsMappingLoading(true)
     try {
       const result = await mapColumns(f)
-      // Even if Gemini errored, still show the modal with whatever columns came back
-      // so the user can map manually
-      const fallback: import("@/src/types").ColumnMappingResult = result?.error
-        ? { mappings: {}, needs_user_input: [], summary: "Gemini unavailable — please map columns manually.", all_columns: [] }
-        : result
-      setMappingResult(fallback)
+      setMappingResult(result?.error
+        ? { mappings: {}, needs_user_input: [], summary: "AI unavailable — please map your columns manually below.", all_columns: result.all_columns ?? [] }
+        : result)
       setShowMapper(true)
     } catch {
-      // Backend unreachable — show empty mapper so user can still map manually
-      setMappingResult({ mappings: {}, needs_user_input: [], summary: "Could not reach backend — please map columns manually.", all_columns: [] })
+      // Backend completely unreachable — parse column headers client-side so dropdowns still work
+      const cols = await readFileCsvHeaders(f)
+      setMappingResult({ mappings: {}, needs_user_input: [], summary: "Could not reach backend — please map your columns manually below.", all_columns: cols })
       setShowMapper(true)
     } finally {
       setIsMappingLoading(false)
@@ -378,6 +400,9 @@ export default function App() {
               <TabsTrigger value="valuation-engine" className="gap-2 px-4 py-2.5 rounded-lg data-[state=active]:bg-foreground data-[state=active]:text-background data-[state=active]:shadow-sm transition-all">
                 <Settings2 className="w-4 h-4" /> Price Discovery
               </TabsTrigger>
+              <TabsTrigger value="price-analysis" className="gap-2 px-4 py-2.5 rounded-lg data-[state=active]:bg-foreground data-[state=active]:text-background data-[state=active]:shadow-sm transition-all">
+                <BarChart3 className="w-4 h-4" /> Price Analysis
+              </TabsTrigger>
               <TabsTrigger value="market-dynamics" className="gap-2 px-4 py-2.5 rounded-lg data-[state=active]:bg-foreground data-[state=active]:text-background data-[state=active]:shadow-sm transition-all">
                 <Activity className="w-4 h-4" /> Market Intelligence
               </TabsTrigger>
@@ -400,6 +425,10 @@ export default function App() {
 
             <TabsContent value="valuation-engine" className="mt-0 animate-in fade-in-0 slide-in-from-bottom-4 duration-300">
               {result ? <ValuationEngineTab result={result} /> : <LockedState icon={<Settings2 className="w-6 h-6" />} label="Price Discovery" />}
+            </TabsContent>
+
+            <TabsContent value="price-analysis" className="mt-0 animate-in fade-in-0 slide-in-from-bottom-4 duration-300">
+              {result ? <PriceAnalysisTab result={result} /> : <LockedState icon={<BarChart3 className="w-6 h-6" />} label="Price Analysis" />}
             </TabsContent>
 
             <TabsContent value="market-dynamics" className="mt-0 animate-in fade-in-0 slide-in-from-bottom-4 duration-300">

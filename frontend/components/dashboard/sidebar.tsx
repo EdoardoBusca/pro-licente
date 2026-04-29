@@ -2,7 +2,10 @@
 
 import { useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
-import { Upload, FileSpreadsheet, AlertTriangle, Check, Building2, ArrowRight, Sparkles, X, Loader2, Wand2, LogOut, User, ShieldCheck } from "lucide-react"
+import {
+  Upload, FileSpreadsheet, Check, Building2, Sparkles, X,
+  Loader2, Wand2, LogOut, User, ShieldCheck, ChevronRight,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Select,
@@ -28,6 +31,12 @@ interface SidebarProps {
   onCollapse?: () => void
   currentUser?: { name: string; email: string; role: string } | null
   onLogout?: () => void
+}
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
 export function Sidebar({
@@ -57,157 +66,138 @@ export function Sidebar({
     (e: React.DragEvent) => {
       e.preventDefault()
       setIsDragging(false)
-      const files = e.dataTransfer.files
-      if (files.length > 0) {
-        const f = files[0]
-        if (f.name.endsWith(".csv") || f.name.endsWith(".xlsx")) {
-          onFileChange(f)
-        }
-      }
+      const f = e.dataTransfer.files[0]
+      if (f && (f.name.endsWith(".csv") || f.name.endsWith(".xlsx"))) onFileChange(f)
     },
-    [onFileChange]
+    [onFileChange],
   )
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files
-    if (files && files.length > 0) onFileChange(files[0])
+    const f = e.target.files?.[0]
+    if (f) onFileChange(f)
   }
 
-  // Require mapping to be confirmed when a file is loaded and mapping is available
-  const needsMapping = file !== null && !mappingConfirmed && !isMappingLoading
+  const needsMapping  = file !== null && !mappingConfirmed && !isMappingLoading
   const canInitialize = file !== null && target !== "" && !isTraining && !needsMapping
 
   return (
     <aside className="w-80 min-h-screen bg-card border-r border-border flex flex-col">
-      {/* Header */}
-      <div className="p-6 border-b border-border">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-foreground rounded-xl flex items-center justify-center">
-              <Building2 className="w-5 h-5 text-background" />
-            </div>
-            <div>
-              <h1 className="font-semibold text-base tracking-tight">Estate Vantage</h1>
-              <p className="text-xs text-muted-foreground">Analytics Platform</p>
-            </div>
+
+      {/* ── Logo ───────────────────────────────────────────────────────────── */}
+      <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 bg-foreground rounded-lg flex items-center justify-center shrink-0">
+            <Building2 className="w-4 h-4 text-background" />
           </div>
-          {onCollapse && (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onCollapse}
-              className="h-8 w-8 rounded-lg hover:bg-muted"
-            >
-              <X className="w-4 h-4" />
-            </Button>
-          )}
+          <div>
+            <p className="text-sm font-semibold tracking-tight leading-none">Estate Vantage</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Analytics Platform</p>
+          </div>
         </div>
+        {onCollapse && (
+          <button onClick={onCollapse}
+            className="w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
 
-      {/* Main Content */}
-      <div className="flex-1 p-6 space-y-6 overflow-y-auto">
-        {/* Upload Section */}
-        <div>
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Data Source
-            </span>
-          </div>
-          <div
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            className={`
-              relative border-2 border-dashed rounded-xl p-6 text-center transition-all duration-300 cursor-pointer
-              ${
-                isDragging
-                  ? "border-foreground bg-muted/50 scale-[1.02]"
-                  : file
-                  ? "border-estate-green/50 bg-estate-green/5"
-                  : "border-border hover:border-foreground/30 hover:bg-muted/30"
-              }
-            `}
-          >
-            <input
-              type="file"
-              accept=".csv,.xlsx"
-              onChange={handleFileInput}
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-            />
-            {file ? (
-              <div className="flex flex-col items-center gap-3">
-                <div className="w-12 h-12 rounded-full bg-estate-green/10 flex items-center justify-center">
-                  <Check className="w-6 h-6 text-estate-green" />
-                </div>
-                <div className="flex items-center gap-2">
-                  <FileSpreadsheet className="w-4 h-4 text-estate-green" />
-                  <span className="text-sm font-medium truncate max-w-[160px]">{file.name}</span>
-                </div>
-                <span className="text-xs text-muted-foreground">Click to replace</span>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center gap-3">
-                <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
-                  <Upload className="w-5 h-5 text-muted-foreground" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Drop your dataset</p>
-                  <p className="text-xs text-muted-foreground mt-1">CSV or XLSX files</p>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
+      {/* ── Scrollable body ────────────────────────────────────────────────── */}
+      <div className="flex-1 overflow-y-auto px-5 py-5 space-y-5">
 
-        {/* AI Column Mapping Status */}
+        {/* Dataset upload */}
+        <section>
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-3">Dataset</p>
+
+          {file ? (
+            /* ── File loaded state ── */
+            <div className="rounded-xl border border-border bg-muted/30 px-4 py-3 flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-emerald-50 border border-emerald-100 flex items-center justify-center shrink-0">
+                <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium truncate leading-tight">{file.name}</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">{formatBytes(file.size)}</p>
+              </div>
+              {/* Re-upload trigger wrapping a hidden input */}
+              <label className="w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer shrink-0">
+                <input type="file" accept=".csv,.xlsx" onChange={handleFileInput} className="hidden" />
+                <X className="w-3.5 h-3.5" />
+              </label>
+            </div>
+          ) : (
+            /* ── Empty drop zone ── */
+            <label
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              className={`
+                block rounded-xl border-2 border-dashed px-5 py-6 text-center cursor-pointer
+                transition-all duration-200
+                ${isDragging
+                  ? "border-foreground bg-muted/50 scale-[1.01]"
+                  : "border-border hover:border-foreground/30 hover:bg-muted/20"
+                }
+              `}
+            >
+              <input type="file" accept=".csv,.xlsx" onChange={handleFileInput} className="hidden" />
+              <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center mx-auto mb-3">
+                <Upload className="w-4 h-4 text-muted-foreground" />
+              </div>
+              <p className="text-sm font-medium text-foreground">Drop your dataset</p>
+              <p className="text-[11px] text-muted-foreground mt-1">CSV or XLSX · click to browse</p>
+            </label>
+          )}
+        </section>
+
+        {/* Column mapping status */}
         {file && (isMappingLoading || mappingReady || mappingConfirmed) && (
-          <div>
+          <section>
             {isMappingLoading && (
-              <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-muted text-xs text-muted-foreground">
+              <div className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl bg-muted border border-border text-xs text-muted-foreground">
                 <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
-                Gemini is reading your columns…
+                Detecting column structure…
               </div>
             )}
+
             {mappingConfirmed && !isMappingLoading && (
-              <div className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-estate-green/10 border border-estate-green/20 text-xs">
-                <div className="flex items-center gap-2 text-estate-green">
+              <div className="flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-emerald-50 border border-emerald-100 text-xs">
+                <div className="flex items-center gap-2 text-emerald-700 font-medium">
                   <Check className="w-3.5 h-3.5 shrink-0" />
-                  Column mapping confirmed
+                  Columns confirmed
                 </div>
                 {onReviewMapping && (
-                  <button onClick={onReviewMapping} className="text-muted-foreground hover:text-foreground underline underline-offset-2">
+                  <button onClick={onReviewMapping}
+                    className="text-emerald-600 hover:text-emerald-800 font-medium transition-colors">
                     Edit
                   </button>
                 )}
               </div>
             )}
+
             {mappingReady && !mappingConfirmed && !isMappingLoading && (
               <button
                 onClick={onReviewMapping}
-                className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl bg-violet-50 border border-violet-200 text-xs text-violet-700 hover:bg-violet-100 transition-colors"
+                className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs hover:bg-slate-100 transition-colors"
               >
-                <div className="flex items-center gap-2">
-                  <Wand2 className="w-3.5 h-3.5 shrink-0" />
-                  <span className="font-medium">AI mapped your columns</span>
+                <div className="flex items-center gap-2 text-foreground font-medium">
+                  <Wand2 className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
+                  Columns mapped — review
                 </div>
-                <span className="text-violet-500 font-medium">Review →</span>
+                <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
               </button>
             )}
-          </div>
+          </section>
         )}
 
         {/* Configuration */}
-        <div className="space-y-4">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Configuration
-            </span>
-          </div>
+        <section className="space-y-3.5">
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">Configuration</p>
 
-          <div className="space-y-2">
-            <label className="text-sm text-foreground">Target Variable</label>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-foreground">Target Variable</label>
             <Select value={target} onValueChange={onTargetChange}>
-              <SelectTrigger className="w-full bg-background border-border">
+              <SelectTrigger className="w-full bg-background border-border text-sm h-9 rounded-lg">
                 <SelectValue placeholder="Select variable" />
               </SelectTrigger>
               <SelectContent>
@@ -219,10 +209,10 @@ export function Sidebar({
             </Select>
           </div>
 
-          <div className="space-y-2">
-            <label className="text-sm text-foreground">Forecast Horizon</label>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-foreground">Forecast Horizon</label>
             <Select value={horizon} onValueChange={onHorizonChange}>
-              <SelectTrigger className="w-full bg-background border-border">
+              <SelectTrigger className="w-full bg-background border-border text-sm h-9 rounded-lg">
                 <SelectValue placeholder="Select period" />
               </SelectTrigger>
               <SelectContent>
@@ -233,58 +223,53 @@ export function Sidebar({
               </SelectContent>
             </Select>
           </div>
-        </div>
+        </section>
 
-        {/* Initialize Button */}
+        {/* CTA */}
         {needsMapping && !isMappingLoading ? (
           <button
             onClick={onReviewMapping}
-            className="w-full h-12 rounded-xl gap-2 flex items-center justify-center bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium transition-colors"
+            className="w-full h-11 rounded-xl flex items-center justify-center gap-2 bg-foreground text-background text-sm font-medium hover:opacity-90 transition-opacity"
           >
             <Wand2 className="w-4 h-4" />
             Review Column Mapping
-            <ArrowRight className="w-4 h-4" />
           </button>
         ) : (
           <Button
             onClick={onInitialize}
-            className="w-full h-12 rounded-xl gap-2 group"
+            className="w-full h-11 rounded-xl gap-2 group"
             disabled={!canInitialize}
           >
             {isTraining ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                Training Models...
+                Training Models…
               </>
             ) : (
               <>
                 <Sparkles className="w-4 h-4" />
                 Initialize Engine
-                <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
               </>
             )}
           </Button>
         )}
+
+        {/* Requirements note — only shown when no file loaded */}
+        {!file && (
+          <p className="text-[11px] text-muted-foreground leading-relaxed px-0.5">
+            Include property addresses, square footage, and sale prices for best accuracy.
+          </p>
+        )}
       </div>
 
-      {/* Data Quality Notice */}
-      <div className="p-6 border-t border-border">
-        <div className="flex gap-3 p-4 rounded-xl bg-estate-amber/5 border border-estate-amber/20">
-          <AlertTriangle className="w-4 h-4 text-estate-amber shrink-0 mt-0.5" />
-          <div className="text-xs text-muted-foreground leading-relaxed">
-            <span className="font-medium text-foreground">Data Requirements:</span> Include property
-            addresses, square footage, and sale prices for optimal accuracy.
-          </div>
-        </div>
-      </div>
-
-      {/* User Footer */}
+      {/* ── User footer ─────────────────────────────────────────────────────── */}
       {currentUser && (
-        <div className="p-4 border-t border-border space-y-2">
+        <div className="px-5 py-4 border-t border-border space-y-2">
           {currentUser.role === "admin" && (
             <button
               onClick={() => router.push("/admin")}
-              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold text-[#1D4ED8] bg-[#EFF6FF] hover:bg-[#DBEAFE] transition-colors"
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 transition-colors"
             >
               <ShieldCheck className="w-3.5 h-3.5" />
               Admin Panel
@@ -292,20 +277,20 @@ export function Sidebar({
           )}
           <div className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl bg-muted/50">
             <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-8 h-8 rounded-full bg-[#0F172A] flex items-center justify-center shrink-0">
-                <User className="w-4 h-4 text-white" />
+              <div className="w-7 h-7 rounded-full bg-foreground flex items-center justify-center shrink-0">
+                <User className="w-3.5 h-3.5 text-background" />
               </div>
               <div className="min-w-0">
-                <p className="text-xs font-semibold text-foreground truncate">{currentUser.name}</p>
+                <p className="text-xs font-semibold truncate leading-tight">{currentUser.name}</p>
                 <p className="text-[10px] text-muted-foreground truncate">{currentUser.email}</p>
               </div>
             </div>
             <button
               onClick={onLogout}
               title="Sign out"
-              className="p-1.5 rounded-lg text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors shrink-0"
+              className="w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors shrink-0"
             >
-              <LogOut className="w-4 h-4" />
+              <LogOut className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>

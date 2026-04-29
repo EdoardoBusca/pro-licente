@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table"
-import { Building2, TrendingUp, AlertTriangle, Search, TrendingDown, BarChart2 } from "lucide-react"
+import { Building2, TrendingUp, AlertTriangle, Search, TrendingDown, BarChart2, CheckCircle2 } from "lucide-react"
 import { InfoTip } from "@/components/ui/info-tip"
 import { Input } from "@/components/ui/input"
 import type { TrainingResult } from "@/src/types"
@@ -46,6 +46,41 @@ export function MarketInventoryTab({ result }: MarketInventoryTabProps) {
 
   return (
     <div className="space-y-6">
+
+      {/* ── Hero banner ──────────────────────────────────────────────────────── */}
+      <div className="relative overflow-hidden rounded-2xl bg-foreground text-background p-6">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-estate-green/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+        <div className="relative flex items-start justify-between gap-6">
+          <div className="flex items-start gap-4">
+            <div className="w-14 h-14 rounded-xl bg-estate-green/20 flex items-center justify-center shrink-0">
+              <Building2 className="w-7 h-7 text-estate-green" />
+            </div>
+            <div>
+              <p className="text-sm text-background/60 mb-1">Market Inventory</p>
+              <h2 className="text-3xl font-semibold tabular-nums mb-3">{dq.total_rows.toLocaleString()}</h2>
+              <div className="flex items-center gap-2 text-sm text-estate-green">
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Properties analyzed</span>
+              </div>
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-6 shrink-0">
+            {[
+              { label: "Undervalued",  value: String(arb.undervalued_count), highlight: true,  tip: "Properties trading below AI estimated value." },
+              { label: "Overpriced",   value: String(arb.overpriced_count),  highlight: false, tip: "Properties trading above AI estimated value." },
+              { label: "Avg AI Delta", value: avgDeltaStr,                   highlight: false, tip: "Average % gap between AI valuation and list price." },
+            ].map(({ label, value, highlight, tip }) => (
+              <div key={label} className="text-center">
+                <p className="text-xs text-background/50 mb-1 flex items-center justify-center gap-0.5">
+                  {label}<InfoTip text={tip} />
+                </p>
+                <p className={`text-xl font-semibold tabular-nums ${highlight ? "text-estate-green" : ""}`}>{value}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {summaryCards.map((card) => (
           <Card key={card.label} className={`border-0 shadow-sm ${card.highlight ? "bg-estate-green/5" : ""}`}>

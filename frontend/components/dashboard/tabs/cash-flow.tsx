@@ -5,7 +5,8 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   BarChart, Bar, Cell, ReferenceLine, Legend,
 } from "recharts"
-import { TrendingUp, DollarSign, Building2, Info, PiggyBank, Layers } from "lucide-react"
+import { TrendingUp, DollarSign, Building2, Info, PiggyBank, Layers, CheckCircle2 } from "lucide-react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { InfoTip } from "@/components/ui/info-tip"
 import type { TrainingResult } from "@/src/types"
 import { calcMortgage, calcRemainingBalance, calcIRR, getDefaultPrice, getDefaultAppreciation } from "@/src/finance"
@@ -88,18 +89,18 @@ function NumberInput({
 }) {
   return (
     <div>
-      <label className="block text-xs font-semibold uppercase tracking-wide text-[#64748B] mb-1.5">{label}</label>
-      <div className="flex items-center rounded-lg border border-gray-200 bg-[#F8FAFC] overflow-hidden focus-within:border-[#10B981] focus-within:ring-1 focus-within:ring-[#10B981] transition-all">
-        {prefix && <span className="px-3 text-sm text-[#64748B] border-r border-gray-200 bg-white select-none">{prefix}</span>}
+      <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">{label}</label>
+      <div className="flex items-center rounded-lg border border-border bg-background overflow-hidden focus-within:ring-1 focus-within:ring-foreground/20 transition-all">
+        {prefix && <span className="px-3 text-sm text-muted-foreground border-r border-border bg-muted/40 select-none">{prefix}</span>}
         <input
           type="number"
           value={value}
           step={step}
           min={min}
           onChange={(e) => onChange(Number(e.target.value))}
-          className="flex-1 bg-transparent px-3 py-2.5 text-sm text-[#0F172A] outline-none min-w-0"
+          className="flex-1 bg-transparent px-3 py-2.5 text-sm text-foreground outline-none min-w-0"
         />
-        {suffix && <span className="px-3 text-sm text-[#64748B] border-l border-gray-200 bg-white select-none">{suffix}</span>}
+        {suffix && <span className="px-3 text-sm text-muted-foreground border-l border-border bg-muted/40 select-none">{suffix}</span>}
       </div>
     </div>
   )
@@ -108,12 +109,12 @@ function NumberInput({
 const CashFlowTooltip = ({ active, payload, label }: { active?: boolean; payload?: any[]; label?: string }) => {
   if (!active || !payload?.length) return null
   return (
-    <div className="rounded-xl px-4 py-3 text-xs bg-white border border-gray-200 shadow-xl">
-      <p className="font-semibold mb-2 text-[#0F172A]">Year {label}</p>
+    <div className="rounded-xl px-4 py-3 text-xs bg-card border border-border shadow-xl">
+      <p className="font-semibold mb-2 text-foreground">Year {label}</p>
       {payload.map((p: any) => (
         <div key={p.dataKey} className="flex items-center justify-between gap-6 mb-1">
           <span style={{ color: p.color }}>{p.name}</span>
-          <span className="font-semibold text-[#0F172A]">{fmtK(p.value)}</span>
+          <span className="font-semibold text-foreground">{fmtK(p.value)}</span>
         </div>
       ))}
     </div>
@@ -178,91 +179,83 @@ export function CashFlowTab({ result }: CashFlowTabProps) {
   }))
 
   return (
-    <div className="space-y-8">
-      {/* Summary KPIs */}
-      <section className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        {[
-          {
-            label: `${projectionYears}yr Total Return`,
-            value: fmt(totalReturn),
-            sub: fmtPct(totalReturnPct, 0) + " on invested capital",
-            color: totalReturn >= 0 ? "#166534" : "#991B1B",
-            bg: totalReturn >= 0 ? "#f0fdf4" : "#fef2f2",
-            tip: "Total wealth created: equity built up plus all net cash flows, minus your initial down payment.",
-          },
-          {
-            label: "IRR",
-            value: irr !== null ? fmtPct(irr) : "N/A",
-            sub: "Internal rate of return",
-            color: (irr ?? 0) >= 10 ? "#166534" : (irr ?? 0) >= 6 ? "#92400E" : "#991B1B",
-            bg: "#F8FAFC",
-            tip: "Annualised return that accounts for the time value of all cash flows including the final sale. The standard benchmark for comparing investments.",
-          },
-          {
-            label: "Equity at Exit",
-            value: fmt(finalRow?.equity ?? 0),
-            sub: `Property: ${fmt(finalRow?.propertyValue ?? 0)}`,
-            color: "#1D4ED8",
-            bg: "#EFF6FF",
-            tip: "Projected property value minus remaining loan balance at the end of your holding period — what you'd pocket before taxes on a sale.",
-          },
-          {
-            label: "Cumulative Cash Flow",
-            value: fmt(totalCashFlow),
-            sub: `${projectionYears} years of net income`,
-            color: totalCashFlow >= 0 ? "#166534" : "#991B1B",
-            bg: totalCashFlow >= 0 ? "#f0fdf4" : "#fef2f2",
-            tip: "Total net operating income minus mortgage payments over the full holding period, before the sale.",
-          },
-        ].map((kpi) => (
-          <div key={kpi.label} className="rounded-xl border border-gray-100 p-5" style={{ background: kpi.bg }}>
-            <p className="text-xs uppercase tracking-wide text-[#64748B] flex items-center">
-              {kpi.label}
-              <InfoTip text={kpi.tip} />
-            </p>
-            <p className="text-2xl font-bold mt-1.5" style={{ color: kpi.color }}>{kpi.value}</p>
-            <p className="text-xs text-[#94A3B8] mt-1">{kpi.sub}</p>
-          </div>
-        ))}
-      </section>
+    <div className="space-y-6">
 
-      <div className="grid grid-cols-1 xl:grid-cols-[360px_1fr] gap-8">
+      {/* ── Hero banner ──────────────────────────────────────────────────────── */}
+      <div className="relative overflow-hidden rounded-2xl bg-foreground text-background p-6">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-estate-green/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+        <div className="relative flex items-start justify-between gap-6">
+          <div className="flex items-start gap-4">
+            <div className="w-14 h-14 rounded-xl bg-estate-green/20 flex items-center justify-center shrink-0">
+              <PiggyBank className="w-7 h-7 text-estate-green" />
+            </div>
+            <div>
+              <p className="text-sm text-background/60 mb-1">Cash Flow &amp; Returns</p>
+              <h2 className="text-3xl font-semibold tabular-nums mb-3">{fmt(totalReturn)}</h2>
+              <div className="flex items-center gap-2 text-sm text-estate-green">
+                <CheckCircle2 className="w-4 h-4" />
+                <span>{projectionYears}-year projected total return</span>
+              </div>
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-6 shrink-0">
+            {[
+              { label: "IRR",              value: irr !== null ? fmtPct(irr) : "N/A", highlight: (irr ?? 0) >= 10, tip: "Internal Rate of Return — annualised return including the final sale." },
+              { label: "Equity at Exit",   value: fmt(finalRow?.equity ?? 0),          highlight: false,            tip: "Property value minus loan balance at end of holding period." },
+              { label: "Total Cash Flow",  value: fmt(totalCashFlow),                  highlight: totalCashFlow >= 0, tip: "Net income minus debt service over the full holding period." },
+            ].map(({ label, value, highlight, tip }) => (
+              <div key={label} className="text-center">
+                <p className="text-xs text-background/50 mb-1 flex items-center justify-center gap-0.5">
+                  {label}<InfoTip text={tip} />
+                </p>
+                <p className={`text-xl font-semibold tabular-nums ${highlight ? "text-estate-green" : ""}`}>{value}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-[340px_1fr] gap-6">
         {/* ── Left: Inputs ── */}
         <div className="space-y-5">
-          <section className="rounded-xl border border-gray-100 bg-white p-6 shadow-[0_2px_10px_rgba(15,23,42,0.04)]">
-            <div className="flex items-center gap-2 mb-5">
-              <Building2 className="w-4 h-4 text-[#334155]" />
-              <h3 className="text-base font-semibold text-[#0F172A]">Property & Financing</h3>
-            </div>
-            <div className="space-y-4">
-              <NumberInput label="Purchase Price" value={propertyPrice} onChange={setPropertyPrice} prefix="$" step={1000} />
-              <NumberInput label="Down Payment" value={downPaymentPct} onChange={setDownPaymentPct} suffix="%" step={0.5} min={0} />
-              <NumberInput label="Interest Rate" value={interestRate} onChange={setInterestRate} suffix="%" step={0.125} />
-              <NumberInput label="Loan Term" value={loanTermYears} onChange={setLoanTermYears} suffix="years" step={5} min={5} />
-              <NumberInput label="Monthly Rent" value={monthlyRent} onChange={setMonthlyRent} prefix="$" step={50} />
-              <NumberInput label="Vacancy Rate" value={vacancyRate} onChange={setVacancyRate} suffix="%" step={0.5} />
-              <NumberInput label="Monthly Expenses" value={monthlyExpenses} onChange={setMonthlyExpenses} prefix="$" step={50} />
-            </div>
-          </section>
+          <Card className="border-0 shadow-sm">
+            <CardHeader className="pb-4">
+              <div className="flex items-center gap-2">
+                <Building2 className="w-4 h-4 text-muted-foreground" />
+                <CardTitle className="text-base font-semibold">Property &amp; Financing</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <NumberInput label="Purchase Price"  value={propertyPrice}    onChange={setPropertyPrice}    prefix="$" step={1000} />
+              <NumberInput label="Down Payment"    value={downPaymentPct}   onChange={setDownPaymentPct}   suffix="%" step={0.5} min={0} />
+              <NumberInput label="Interest Rate"   value={interestRate}     onChange={setInterestRate}     suffix="%" step={0.125} />
+              <NumberInput label="Loan Term"       value={loanTermYears}    onChange={setLoanTermYears}    suffix="years" step={5} min={5} />
+              <NumberInput label="Monthly Rent"    value={monthlyRent}      onChange={setMonthlyRent}      prefix="$" step={50} />
+              <NumberInput label="Vacancy Rate"    value={vacancyRate}      onChange={setVacancyRate}      suffix="%" step={0.5} />
+              <NumberInput label="Monthly Expenses" value={monthlyExpenses}  onChange={setMonthlyExpenses}  prefix="$" step={50} />
+            </CardContent>
+          </Card>
 
-          <section className="rounded-xl border border-gray-100 bg-white p-6 shadow-[0_2px_10px_rgba(15,23,42,0.04)]">
-            <div className="flex items-center gap-2 mb-5">
-              <TrendingUp className="w-4 h-4 text-[#334155]" />
-              <h3 className="text-base font-semibold text-[#0F172A]">Growth Assumptions</h3>
-            </div>
-            <div className="space-y-4">
+          <Card className="border-0 shadow-sm">
+            <CardHeader className="pb-4">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-muted-foreground" />
+                <CardTitle className="text-base font-semibold">Growth Assumptions</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
               <div>
                 <NumberInput label="Annual Appreciation" value={appreciationRate} onChange={setAppreciationRate} suffix="%" step={0.25} />
-                <p className="text-xs text-[#94A3B8] mt-1 px-1">AI-derived from your dataset: {fmtPct(defaultAppreciation)}</p>
+                <p className="text-xs text-muted-foreground mt-1 px-1">AI-derived: {fmtPct(defaultAppreciation)}</p>
               </div>
-              <NumberInput label="Annual Rent Growth" value={rentGrowthRate} onChange={setRentGrowthRate} suffix="%" step={0.25} />
-              <NumberInput label="Annual Expense Growth" value={expenseGrowthRate} onChange={setExpenseGrowthRate} suffix="%" step={0.25} />
+              <NumberInput label="Annual Rent Growth"    value={rentGrowthRate}    onChange={setRentGrowthRate}    suffix="%" step={0.25} />
+              <NumberInput label="Annual Expense Growth" value={expenseGrowthRate}  onChange={setExpenseGrowthRate}  suffix="%" step={0.25} />
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wide text-[#64748B] mb-1.5">Projection Period</label>
+                <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">Projection Period</label>
                 <select
                   value={projectionYears}
                   onChange={(e) => setProjectionYears(Number(e.target.value))}
-                  className="w-full rounded-lg border border-gray-200 bg-[#F8FAFC] px-3 py-2.5 text-sm text-[#0F172A] outline-none"
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-foreground outline-none"
                 >
                   <option value={5}>5 years</option>
                   <option value={10}>10 years</option>
@@ -271,102 +264,104 @@ export function CashFlowTab({ result }: CashFlowTabProps) {
                   <option value={30}>30 years</option>
                 </select>
               </div>
-            </div>
-          </section>
+            </CardContent>
+          </Card>
         </div>
 
         {/* ── Right: Charts & Table ── */}
         <div className="space-y-6">
-          {/* Equity Build Chart */}
-          <section className="rounded-xl border border-gray-100 bg-white p-6 shadow-[0_2px_10px_rgba(15,23,42,0.04)]">
-            <div className="flex items-center gap-2 mb-5">
-              <Layers className="w-4 h-4 text-[#334155]" />
-              <h3 className="text-base font-semibold text-[#0F172A] flex items-center">Equity Build-up<InfoTip text="How your ownership stake grows each year as the loan pays down (amortisation) and the property appreciates. The gap between property value and loan balance is your equity." /></h3>
-            </div>
-            <ResponsiveContainer width="100%" height={200}>
-              <AreaChart data={equityChartData} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
-                <defs>
-                  <linearGradient id="equityGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.15} />
-                    <stop offset="95%" stopColor="#3B82F6" stopOpacity={0.01} />
-                  </linearGradient>
-                  <linearGradient id="valueGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10B981" stopOpacity={0.15} />
-                    <stop offset="95%" stopColor="#10B981" stopOpacity={0.01} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
-                <XAxis dataKey="year" tick={{ fontSize: 11, fill: "#94A3B8" }} />
-                <YAxis tickFormatter={fmtK} tick={{ fontSize: 11, fill: "#94A3B8" }} width={60} />
-                <Tooltip content={<CashFlowTooltip />} />
-                <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12 }} />
-                <Area type="monotone" dataKey="propertyValue" name="Property Value" stroke="#10B981" fill="url(#valueGrad)" strokeWidth={2} dot={false} />
-                <Area type="monotone" dataKey="equity" name="Equity" stroke="#3B82F6" fill="url(#equityGrad)" strokeWidth={2} dot={false} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </section>
+          <Card className="border-0 shadow-sm">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-base font-semibold flex items-center gap-1">
+                Equity Build-up
+                <InfoTip text="How your ownership stake grows as the loan pays down and the property appreciates." />
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={200}>
+                <AreaChart data={equityChartData} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
+                  <defs>
+                    <linearGradient id="equityGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.15} />
+                      <stop offset="95%" stopColor="#3B82F6" stopOpacity={0.01} />
+                    </linearGradient>
+                    <linearGradient id="valueGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10B981" stopOpacity={0.15} />
+                      <stop offset="95%" stopColor="#10B981" stopOpacity={0.01} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                  <XAxis dataKey="year" tick={{ fontSize: 11 }} />
+                  <YAxis tickFormatter={fmtK} tick={{ fontSize: 11 }} width={60} />
+                  <Tooltip content={<CashFlowTooltip />} />
+                  <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12 }} />
+                  <Area type="monotone" dataKey="propertyValue" name="Property Value" stroke="#10B981" fill="url(#valueGrad)" strokeWidth={2} dot={false} />
+                  <Area type="monotone" dataKey="equity"        name="Equity"         stroke="#3B82F6" fill="url(#equityGrad)" strokeWidth={2} dot={false} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
 
-          {/* Annual Cash Flow Chart */}
-          <section className="rounded-xl border border-gray-100 bg-white p-6 shadow-[0_2px_10px_rgba(15,23,42,0.04)]">
-            <div className="flex items-center gap-2 mb-5">
-              <DollarSign className="w-4 h-4 text-[#334155]" />
-              <h3 className="text-base font-semibold text-[#0F172A]">Annual Cash Flow</h3>
-            </div>
-            <ResponsiveContainer width="100%" height={180}>
-              <BarChart data={cashFlowChartData} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
-                <XAxis dataKey="year" tickFormatter={(v) => `Yr ${v}`} tick={{ fontSize: 11, fill: "#94A3B8" }} />
-                <YAxis tickFormatter={fmtK} tick={{ fontSize: 11, fill: "#94A3B8" }} width={60} />
-                <Tooltip content={<CashFlowTooltip />} />
-                <ReferenceLine y={0} stroke="#E2E8F0" strokeWidth={1.5} />
-                <Bar dataKey="cashFlow" name="Annual Cash Flow" radius={[4, 4, 0, 0]}>
-                  {cashFlowChartData.map((entry) => (
-                    <Cell key={entry.year} fill={entry.cashFlow >= 0 ? "#10B981" : "#EF4444"} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </section>
-
-          {/* Year-by-Year Table */}
-          <section className="rounded-xl border border-gray-100 bg-white p-6 shadow-[0_2px_10px_rgba(15,23,42,0.04)]">
-            <div className="flex items-center gap-2 mb-5">
-              <PiggyBank className="w-4 h-4 text-[#334155]" />
-              <h3 className="text-base font-semibold text-[#0F172A]">Year-by-Year Breakdown</h3>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-100">
-                    {["Year", "Prop. Value", "Equity", "NOI", "Cash Flow", "Cumulative CF"].map((h) => (
-                      <th key={h} className="text-left text-xs uppercase tracking-wide text-[#64748B] pb-3 pr-4 font-semibold whitespace-nowrap">{h}</th>
+          <Card className="border-0 shadow-sm">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-base font-semibold">Annual Cash Flow</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={180}>
+                <BarChart data={cashFlowChartData} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                  <XAxis dataKey="year" tickFormatter={(v) => `Yr ${v}`} tick={{ fontSize: 11 }} />
+                  <YAxis tickFormatter={fmtK} tick={{ fontSize: 11 }} width={60} />
+                  <Tooltip content={<CashFlowTooltip />} />
+                  <ReferenceLine y={0} stroke="hsl(var(--border))" strokeWidth={1.5} />
+                  <Bar dataKey="cashFlow" name="Annual Cash Flow" radius={[4, 4, 0, 0]}>
+                    {cashFlowChartData.map((entry) => (
+                      <Cell key={entry.year} fill={entry.cashFlow >= 0 ? "#10B981" : "#EF4444"} />
                     ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((r) => (
-                    <tr key={r.year} className="border-b border-gray-50 hover:bg-[#FAFCFF] transition-colors">
-                      <td className="py-2.5 pr-4 font-medium text-[#0F172A]">Yr {r.year}</td>
-                      <td className="py-2.5 pr-4 text-[#334155]">{fmtK(r.propertyValue)}</td>
-                      <td className="py-2.5 pr-4 text-[#1D4ED8] font-medium">{fmtK(r.equity)}</td>
-                      <td className="py-2.5 pr-4 text-[#334155]">{fmtK(r.noi)}</td>
-                      <td className={`py-2.5 pr-4 font-medium ${r.cashFlow >= 0 ? "text-[#166534]" : "text-[#991B1B]"}`}>
-                        {r.cashFlow >= 0 ? "+" : ""}{fmtK(r.cashFlow)}
-                      </td>
-                      <td className={`py-2.5 font-medium ${r.cumulativeCashFlow >= 0 ? "text-[#166534]" : "text-[#991B1B]"}`}>
-                        {r.cumulativeCashFlow >= 0 ? "+" : ""}{fmtK(r.cumulativeCashFlow)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
 
-          {/* Info */}
-          <div className="rounded-xl border border-gray-100 bg-[#F8FAFC] px-5 py-4 flex gap-3">
-            <Info className="w-4 h-4 text-[#64748B] mt-0.5 shrink-0" />
-            <p className="text-sm text-[#64748B] leading-relaxed">
+          <Card className="border-0 shadow-sm">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-base font-semibold">Year-by-Year Breakdown</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border">
+                      {["Year", "Prop. Value", "Equity", "NOI", "Cash Flow", "Cumulative CF"].map((h) => (
+                        <th key={h} className="text-left text-xs uppercase tracking-wide text-muted-foreground pb-3 pr-4 font-semibold whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((r) => (
+                      <tr key={r.year} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
+                        <td className="py-2.5 pr-4 font-medium text-foreground">Yr {r.year}</td>
+                        <td className="py-2.5 pr-4 text-muted-foreground">{fmtK(r.propertyValue)}</td>
+                        <td className="py-2.5 pr-4 text-blue-600 font-medium">{fmtK(r.equity)}</td>
+                        <td className="py-2.5 pr-4 text-muted-foreground">{fmtK(r.noi)}</td>
+                        <td className={`py-2.5 pr-4 font-medium ${r.cashFlow >= 0 ? "text-emerald-600" : "text-red-500"}`}>
+                          {r.cashFlow >= 0 ? "+" : ""}{fmtK(r.cashFlow)}
+                        </td>
+                        <td className={`py-2.5 font-medium ${r.cumulativeCashFlow >= 0 ? "text-emerald-600" : "text-red-500"}`}>
+                          {r.cumulativeCashFlow >= 0 ? "+" : ""}{fmtK(r.cumulativeCashFlow)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="rounded-xl bg-muted/40 px-5 py-4 flex gap-3">
+            <Info className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
+            <p className="text-sm text-muted-foreground leading-relaxed">
               Appreciation rate pre-filled from your dataset's historical YoY average ({fmtPct(defaultAppreciation)}).
               IRR assumes property sale at end of projection period. All figures are pre-tax estimates.
             </p>

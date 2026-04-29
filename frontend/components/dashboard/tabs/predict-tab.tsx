@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Loader2, Home } from "lucide-react"
+import { Loader2, Home, CheckCircle2 } from "lucide-react"
 import { predictSingle } from "@/src/api"
 import type { TrainingResult } from "@/src/types"
 
@@ -60,6 +60,28 @@ export function PredictTab({ jobId, result }: PredictTabProps) {
 
   return (
     <div className="space-y-6 max-w-2xl">
+
+      {/* ── Hero banner ──────────────────────────────────────────────────────── */}
+      <div className="relative overflow-hidden rounded-2xl bg-foreground text-background p-6">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-estate-green/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+        <div className="relative flex items-start gap-4">
+          <div className="w-14 h-14 rounded-xl bg-estate-green/20 flex items-center justify-center shrink-0">
+            <Home className="w-7 h-7 text-estate-green" />
+          </div>
+          <div>
+            <p className="text-sm text-background/60 mb-1">Single-Property Prediction</p>
+            <h2 className="text-2xl font-semibold mb-3">{result.winner}</h2>
+            <div className="flex items-center gap-4 text-sm">
+              <span className="flex items-center gap-1.5 text-estate-green"><CheckCircle2 className="w-4 h-4" /> Production Ready</span>
+              <span className="text-background/40">·</span>
+              <span className="text-background/60">MAPE {result.mape.toFixed(1)}%</span>
+              <span className="text-background/40">·</span>
+              <span className="text-background/60">R² {result.r2_score.toFixed(3)}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <Card className="border-0 shadow-sm">
         <CardHeader>
           <div className="flex items-center gap-3">

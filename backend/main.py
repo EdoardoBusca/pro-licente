@@ -21,8 +21,12 @@ import os
 import re
 import uuid
 
-import pandas as pd
 from dotenv import load_dotenv
+
+# Load .env before any local imports so env vars are available at module level
+load_dotenv()
+
+import pandas as pd
 from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -40,8 +44,6 @@ from db import (
     save_model_to_db, set_job_result,
 )
 from engine import get_model_state, train_logic
-
-load_dotenv()
 
 # ─── App Setup ─────────────────────────────────────────────────────────────────
 
@@ -116,7 +118,10 @@ async def start_training(
 
     job_id = str(uuid.uuid4())
     try:
-        set_job_result(job_id, "processing")
+        try:
+            set_job_result(job_id, "processing")
+        except Exception:
+            pass  # DB write is best-effort; training proceeds regardless
 
         contents = await file.read()
         max_bytes = int(os.getenv("MAX_UPLOAD_MB", "100")) * 1024 * 1024
@@ -277,8 +282,6 @@ async def map_columns(file: UploadFile = File(...), _user: dict = Depends(get_cu
         ext = os.path.splitext(file.filename.lower())[1]
         if ext not in ALLOWED_FILE_TYPES:
             return JSONResponse(status_code=400, content={"error": f"Unsupported file type '{ext}'."})
-    if not get_groq_client():
-        return JSONResponse(status_code=503, content={"error": "GROQ_API_KEY not configured."})
 
     try:
         contents  = await file.read()
@@ -288,6 +291,16 @@ async def map_columns(file: UploadFile = File(...), _user: dict = Depends(get_cu
 
         df = read_uploaded_file(contents, file.filename)
         df.columns = df.columns.str.strip()
+        all_columns = list(df.columns)
+
+        # If Groq is unavailable, return columns so the user can map manually
+        if not get_groq_client():
+            return {
+                "mappings": {},
+                "needs_user_input": [],
+                "all_columns": all_columns,
+                "summary": "AI unavailable — please map your columns manually below.",
+            }
 
         samples = {col: df[col].dropna().astype(str).head(3).tolist() for col in df.columns}
         sample_text = "\n".join(
@@ -341,7 +354,7 @@ Supported transforms: null, "sqm_to_sqft", "sqft_to_sqm", "sqyd_to_sqft", "deriv
         raw    = re.sub(r"^```(?:json)?\s*", "", raw)
         raw    = re.sub(r"\s*```$", "", raw)
         result = json.loads(raw)
-        result["all_columns"] = list(df.columns)
+        result["all_columns"] = all_columns
         return result
 
     except json.JSONDecodeError as e:

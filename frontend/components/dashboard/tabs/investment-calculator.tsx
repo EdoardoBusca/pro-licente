@@ -3,8 +3,9 @@
 import { useMemo, useState } from "react"
 import {
   DollarSign, Percent, Home, TrendingUp, ShieldCheck,
-  AlertTriangle, CheckCircle2, Info, Calculator,
+  AlertTriangle, CheckCircle2, Info, Calculator, BarChart3,
 } from "lucide-react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { InfoTip } from "@/components/ui/info-tip"
 import type { TrainingResult } from "@/src/types"
 import { calcMortgage, getDefaultPrice } from "@/src/finance"
@@ -44,12 +45,12 @@ interface NumberInputProps {
 function NumberInput({ label, value, onChange, prefix, suffix, step = 1, min = 0, max }: NumberInputProps) {
   return (
     <div>
-      <label className="block text-xs font-semibold uppercase tracking-wide text-[#64748B] mb-1.5">
+      <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">
         {label}
       </label>
-      <div className="flex items-center rounded-lg border border-gray-200 bg-[#F8FAFC] overflow-hidden focus-within:border-[#3B82F6] focus-within:ring-1 focus-within:ring-[#3B82F6] transition-all">
+      <div className="flex items-center rounded-lg border border-border bg-background overflow-hidden focus-within:ring-1 focus-within:ring-foreground/20 transition-all">
         {prefix && (
-          <span className="px-3 text-sm text-[#64748B] border-r border-gray-200 bg-white select-none">{prefix}</span>
+          <span className="px-3 text-sm text-muted-foreground border-r border-border bg-muted/40 select-none">{prefix}</span>
         )}
         <input
           type="number"
@@ -58,10 +59,10 @@ function NumberInput({ label, value, onChange, prefix, suffix, step = 1, min = 0
           min={min}
           max={max}
           onChange={(e) => onChange(Number(e.target.value))}
-          className="flex-1 bg-transparent px-3 py-2.5 text-sm text-[#0F172A] outline-none min-w-0"
+          className="flex-1 bg-transparent px-3 py-2.5 text-sm text-foreground outline-none min-w-0"
         />
         {suffix && (
-          <span className="px-3 text-sm text-[#64748B] border-l border-gray-200 bg-white select-none">{suffix}</span>
+          <span className="px-3 text-sm text-muted-foreground border-l border-border bg-muted/40 select-none">{suffix}</span>
         )}
       </div>
     </div>
@@ -77,15 +78,15 @@ interface MetricCardProps {
   tip?: string
 }
 
-function MetricCard({ label, value, sub, accent = "#0F172A", bg = "#F8FAFC", tip }: MetricCardProps) {
+function MetricCard({ label, value, sub, accent, bg, tip }: MetricCardProps) {
   return (
-    <div className="rounded-xl border border-gray-100 p-5" style={{ background: bg }}>
-      <p className="text-xs uppercase tracking-wide text-[#64748B] flex items-center">
+    <div className="rounded-xl border border-border bg-muted/30 p-5">
+      <p className="text-xs uppercase tracking-wide text-muted-foreground flex items-center">
         {label}
         {tip && <InfoTip text={tip} side="bottom" />}
       </p>
-      <p className="text-2xl font-bold mt-1.5" style={{ color: accent }}>{value}</p>
-      {sub && <p className="text-xs text-[#94A3B8] mt-1">{sub}</p>}
+      <p className="text-2xl font-bold mt-1.5 text-foreground" style={accent ? { color: accent } : undefined}>{value}</p>
+      {sub && <p className="text-xs text-muted-foreground mt-1">{sub}</p>}
     </div>
   )
 }
@@ -130,203 +131,198 @@ export function InvestmentCalculatorTab({ result }: InvestmentCalculatorTabProps
   const RatingIcon = rating.icon
 
   return (
-    <div className="space-y-8">
-      {/* Deal Rating Banner */}
-      <section
-        className="rounded-xl border p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
-        style={{ background: rating.bg, borderColor: rating.color + "33" }}
-      >
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: rating.color + "22" }}>
-            <RatingIcon className="w-5 h-5" style={{ color: rating.color }} />
-          </div>
-          <div>
-            <p className="text-xs uppercase tracking-wide font-semibold" style={{ color: rating.color + "99" }}>
-              Deal Assessment
-            </p>
-            <p className="text-xl font-bold" style={{ color: rating.color }}>{rating.label}</p>
-          </div>
-        </div>
-        <div className="flex gap-6 text-sm">
-          <div className="text-center">
-            <p className="text-xs uppercase tracking-wide flex items-center" style={{ color: rating.color + "88" }}>Cap Rate<InfoTip text="Net Operating Income ÷ Purchase Price. Measures property yield independent of financing. Target ≥ 8% for investment properties." /></p>
-            <p className="font-bold text-lg" style={{ color: rating.color }}>{fmtPct(metrics.capRate)}</p>
-          </div>
-          <div className="text-center">
-            <p className="text-xs uppercase tracking-wide flex items-center" style={{ color: rating.color + "88" }}>CoC Return<InfoTip text="Cash-on-Cash: annual cash flow ÷ down payment. Return on your actual cash invested. Target ≥ 10%." /></p>
-            <p className="font-bold text-lg" style={{ color: rating.color }}>{fmtPct(metrics.coc)}</p>
-          </div>
-          <div className="text-center">
-            <p className="text-xs uppercase tracking-wide flex items-center" style={{ color: rating.color + "88" }}>DSCR<InfoTip text="Debt Service Coverage Ratio: NOI ÷ annual mortgage payments. Most lenders require ≥ 1.25 for investment loans. Below 1.0 means rent doesn't cover the mortgage." /></p>
-            <p className="font-bold text-lg" style={{ color: rating.color }}>{metrics.dscr.toFixed(2)}x</p>
-          </div>
-        </div>
-      </section>
+    <div className="space-y-6">
 
-      <div className="grid grid-cols-1 xl:grid-cols-[400px_1fr] gap-8">
-        {/* ── Left: Inputs ── */}
-        <section className="space-y-6">
-          {/* Property */}
-          <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-[0_2px_10px_rgba(15,23,42,0.04)]">
-            <div className="flex items-center gap-2 mb-5">
-              <Home className="w-4 h-4 text-[#334155]" />
-              <h3 className="text-base font-semibold text-[#0F172A]">Property</h3>
+      {/* ── Hero: Deal Rating Banner ─────────────────────────────────────────── */}
+      <div className="relative overflow-hidden rounded-2xl bg-foreground text-background p-6">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-estate-green/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+        <div className="relative flex items-start justify-between gap-6">
+          <div className="flex items-start gap-4">
+            <div className="w-14 h-14 rounded-xl bg-estate-green/20 flex items-center justify-center shrink-0">
+              <RatingIcon className="w-7 h-7 text-estate-green" />
             </div>
-            <div className="space-y-4">
+            <div>
+              <p className="text-sm text-background/60 mb-1">Deal Assessment</p>
+              <h2 className="text-2xl font-semibold mb-3">{rating.label}</h2>
+              <p className="text-sm text-background/60">Based on Cap Rate, CoC Return, and DSCR</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-6 shrink-0">
+            {[
+              { label: "Cap Rate",   value: fmtPct(metrics.capRate),      highlight: metrics.capRate >= 8,   tip: "Net Operating Income ÷ Purchase Price. Target ≥ 8%." },
+              { label: "CoC Return", value: fmtPct(metrics.coc),          highlight: metrics.coc >= 10,      tip: "Cash-on-Cash: annual cash flow ÷ down payment. Target ≥ 10%." },
+              { label: "DSCR",       value: `${metrics.dscr.toFixed(2)}x`, highlight: metrics.dscr >= 1.25, tip: "NOI ÷ annual mortgage payments. Target ≥ 1.25x." },
+            ].map(({ label, value, highlight, tip }) => (
+              <div key={label} className="text-center">
+                <p className="text-xs text-background/50 mb-1 flex items-center justify-center gap-0.5">
+                  {label}<InfoTip text={tip} />
+                </p>
+                <p className={`text-xl font-semibold tabular-nums ${highlight ? "text-estate-green" : ""}`}>{value}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-[380px_1fr] gap-6">
+        {/* ── Left: Inputs ── */}
+        <div className="space-y-6">
+          <Card className="border-0 shadow-sm">
+            <CardHeader className="pb-4">
+              <div className="flex items-center gap-2">
+                <Home className="w-4 h-4 text-muted-foreground" />
+                <CardTitle className="text-base font-semibold">Property</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
               <NumberInput label="Purchase Price" value={propertyPrice} onChange={setPropertyPrice} prefix="$" step={1000} />
               <NumberInput label="Down Payment" value={downPaymentPct} onChange={setDownPaymentPct} suffix="%" step={0.5} min={0} max={100} />
-              <div className="flex justify-between text-xs text-[#64748B] -mt-2 px-1">
+              <div className="flex justify-between text-xs text-muted-foreground -mt-2 px-1">
                 <span>Down: {fmt(propertyPrice * downPaymentPct / 100)}</span>
                 <span>Loan: {fmt(propertyPrice * (1 - downPaymentPct / 100))}</span>
               </div>
-            </div>
-          </div>
+            </CardContent>
+          </Card>
 
-          {/* Financing */}
-          <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-[0_2px_10px_rgba(15,23,42,0.04)]">
-            <div className="flex items-center gap-2 mb-5">
-              <Percent className="w-4 h-4 text-[#334155]" />
-              <h3 className="text-base font-semibold text-[#0F172A]">Financing</h3>
-            </div>
-            <div className="space-y-4">
+          <Card className="border-0 shadow-sm">
+            <CardHeader className="pb-4">
+              <div className="flex items-center gap-2">
+                <Percent className="w-4 h-4 text-muted-foreground" />
+                <CardTitle className="text-base font-semibold">Financing</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
               <NumberInput label="Interest Rate" value={interestRate} onChange={setInterestRate} suffix="%" step={0.125} min={0} />
               <NumberInput label="Loan Term" value={loanTermYears} onChange={setLoanTermYears} suffix="years" step={5} min={5} max={30} />
-            </div>
-          </div>
+            </CardContent>
+          </Card>
 
-          {/* Income & Expenses */}
-          <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-[0_2px_10px_rgba(15,23,42,0.04)]">
-            <div className="flex items-center gap-2 mb-5">
-              <DollarSign className="w-4 h-4 text-[#334155]" />
-              <h3 className="text-base font-semibold text-[#0F172A]">Income & Expenses</h3>
-            </div>
-            <div className="space-y-4">
+          <Card className="border-0 shadow-sm">
+            <CardHeader className="pb-4">
+              <div className="flex items-center gap-2">
+                <DollarSign className="w-4 h-4 text-muted-foreground" />
+                <CardTitle className="text-base font-semibold">Income &amp; Expenses</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
               <NumberInput label="Monthly Rent" value={monthlyRent} onChange={setMonthlyRent} prefix="$" step={50} />
               <NumberInput label="Vacancy Rate" value={vacancyRate} onChange={setVacancyRate} suffix="%" step={0.5} min={0} max={50} />
               <NumberInput label="Monthly Operating Expenses" value={monthlyExpenses} onChange={setMonthlyExpenses} prefix="$" step={50} />
-              <p className="text-xs text-[#94A3B8] leading-relaxed">
+              <p className="text-xs text-muted-foreground leading-relaxed">
                 Include property tax, insurance, maintenance, property management, HOA, etc.
               </p>
-            </div>
-          </div>
-        </section>
+            </CardContent>
+          </Card>
+        </div>
 
         {/* ── Right: Metrics ── */}
         <div className="space-y-6">
-          {/* Mortgage Breakdown */}
-          <section className="rounded-xl border border-gray-100 bg-white p-6 shadow-[0_2px_10px_rgba(15,23,42,0.04)]">
-            <div className="flex items-center gap-2 mb-5">
-              <Calculator className="w-4 h-4 text-[#334155]" />
-              <h3 className="text-base font-semibold text-[#0F172A]">Mortgage Breakdown</h3>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <MetricCard label="Monthly Payment" value={fmt(metrics.monthlyMortgage)} sub="P&I only" accent="#3B82F6" bg="#EFF6FF" />
-              <MetricCard label="Monthly Cash Flow" value={fmt(metrics.annualCashFlow / 12)} sub="After all costs" accent={metrics.annualCashFlow >= 0 ? "#166534" : "#991B1B"} bg={metrics.annualCashFlow >= 0 ? "#f0fdf4" : "#fef2f2"} />
-              <MetricCard label="Annual NOI" value={fmt(metrics.noi)} sub="Before debt service" accent="#0F172A" tip="Net Operating Income: effective gross income minus operating expenses, before mortgage payments." />
-              <MetricCard label="Break-even Rent" value={fmt(metrics.breakEvenRent)} sub="Required gross rent (vacancy-adjusted)" accent="#78350F" bg="#fef9ee" tip="Minimum monthly rent to cover all costs at your vacancy rate. Your actual rent must exceed this to generate positive cash flow." />
-            </div>
-          </section>
-
-          {/* Investment Ratios */}
-          <section className="rounded-xl border border-gray-100 bg-white p-6 shadow-[0_2px_10px_rgba(15,23,42,0.04)]">
-            <div className="flex items-center gap-2 mb-5">
-              <TrendingUp className="w-4 h-4 text-[#334155]" />
-              <h3 className="text-base font-semibold text-[#0F172A]">Investment Ratios</h3>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-              <div className="rounded-xl border border-gray-100 bg-[#F8FAFC] p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs uppercase tracking-wide text-[#64748B]">Cap Rate</p>
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${metrics.capRate >= 8 ? "bg-green-100 text-green-700" : metrics.capRate >= 5 ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700"}`}>
-                    {metrics.capRate >= 8 ? "Strong" : metrics.capRate >= 5 ? "Fair" : "Weak"}
-                  </span>
-                </div>
-                <p className="text-2xl font-bold text-[#0F172A]">{fmtPct(metrics.capRate)}</p>
-                <div className="mt-2 h-1.5 w-full rounded-full bg-gray-200 overflow-hidden">
-                  <div className="h-full rounded-full bg-[#3B82F6]" style={{ width: `${Math.min(100, metrics.capRate * 7)}%` }} />
-                </div>
-                <p className="text-xs text-[#94A3B8] mt-1.5">Target: ≥ 8%</p>
+          <Card className="border-0 shadow-sm">
+            <CardHeader className="pb-4">
+              <div className="flex items-center gap-2">
+                <Calculator className="w-4 h-4 text-muted-foreground" />
+                <CardTitle className="text-base font-semibold">Mortgage Breakdown</CardTitle>
               </div>
-
-              <div className="rounded-xl border border-gray-100 bg-[#F8FAFC] p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs uppercase tracking-wide text-[#64748B]">Cash-on-Cash</p>
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${metrics.coc >= 10 ? "bg-green-100 text-green-700" : metrics.coc >= 6 ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700"}`}>
-                    {metrics.coc >= 10 ? "Strong" : metrics.coc >= 6 ? "Fair" : "Weak"}
-                  </span>
-                </div>
-                <p className="text-2xl font-bold text-[#0F172A]">{fmtPct(metrics.coc)}</p>
-                <div className="mt-2 h-1.5 w-full rounded-full bg-gray-200 overflow-hidden">
-                  <div className="h-full rounded-full bg-[#10B981]" style={{ width: `${Math.min(100, metrics.coc * 5)}%` }} />
-                </div>
-                <p className="text-xs text-[#94A3B8] mt-1.5">Target: ≥ 10%</p>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <MetricCard label="Monthly Payment"   value={fmt(metrics.monthlyMortgage)}    sub="P&I only" />
+                <MetricCard label="Monthly Cash Flow" value={fmt(metrics.annualCashFlow / 12)} sub="After all costs"
+                  accent={metrics.annualCashFlow >= 0 ? "#10B981" : "#EF4444"} />
+                <MetricCard label="Annual NOI"        value={fmt(metrics.noi)}                 sub="Before debt service" tip="Net Operating Income: effective gross income minus operating expenses, before mortgage payments." />
+                <MetricCard label="Break-even Rent"   value={fmt(metrics.breakEvenRent)}       sub="Vacancy-adjusted" tip="Minimum monthly rent to cover all costs at your vacancy rate." />
               </div>
+            </CardContent>
+          </Card>
 
-              <div className="rounded-xl border border-gray-100 bg-[#F8FAFC] p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs uppercase tracking-wide text-[#64748B]">DSCR</p>
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${metrics.dscr >= 1.25 ? "bg-green-100 text-green-700" : metrics.dscr >= 1.0 ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700"}`}>
-                    {metrics.dscr >= 1.25 ? "Safe" : metrics.dscr >= 1.0 ? "Break-even" : "Risk"}
-                  </span>
-                </div>
-                <p className="text-2xl font-bold text-[#0F172A]">{metrics.dscr < 0 ? "Negative" : `${metrics.dscr.toFixed(2)}x`}</p>
-                <div className="mt-2 h-1.5 w-full rounded-full bg-gray-200 overflow-hidden">
-                  <div className="h-full rounded-full bg-[#F59E0B]" style={{ width: `${Math.min(100, metrics.dscr * 50)}%` }} />
-                </div>
-                <p className="text-xs text-[#94A3B8] mt-1.5">Target: ≥ 1.25x</p>
+          <Card className="border-0 shadow-sm">
+            <CardHeader className="pb-4">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-muted-foreground" />
+                <CardTitle className="text-base font-semibold">Investment Ratios</CardTitle>
               </div>
-
-              <div className="rounded-xl border border-gray-100 bg-[#F8FAFC] p-4">
-                <p className="text-xs uppercase tracking-wide text-[#64748B] mb-2 flex items-center">Gross Rent Multiplier<InfoTip text="Purchase Price ÷ Annual Gross Rent. Quick cross-market comparison tool. Target &lt; 12x — lower means better rent-to-price ratio." side="bottom" /></p>
-                <p className="text-2xl font-bold text-[#0F172A]">{metrics.grm.toFixed(1)}x</p>
-                <p className="text-xs text-[#94A3B8] mt-1.5">Lower is better (target: &lt; 12x)</p>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                {[
+                  {
+                    label: "Cap Rate", value: fmtPct(metrics.capRate), target: "≥ 8%",
+                    badge: metrics.capRate >= 8 ? "Strong" : metrics.capRate >= 5 ? "Fair" : "Weak",
+                    badgeCls: metrics.capRate >= 8 ? "bg-emerald-50 text-emerald-700" : metrics.capRate >= 5 ? "bg-amber-50 text-amber-700" : "bg-red-50 text-red-700",
+                    bar: Math.min(100, metrics.capRate * 7), barColor: "#3B82F6",
+                  },
+                  {
+                    label: "Cash-on-Cash", value: fmtPct(metrics.coc), target: "≥ 10%",
+                    badge: metrics.coc >= 10 ? "Strong" : metrics.coc >= 6 ? "Fair" : "Weak",
+                    badgeCls: metrics.coc >= 10 ? "bg-emerald-50 text-emerald-700" : metrics.coc >= 6 ? "bg-amber-50 text-amber-700" : "bg-red-50 text-red-700",
+                    bar: Math.min(100, metrics.coc * 5), barColor: "#10B981",
+                  },
+                  {
+                    label: "DSCR", value: metrics.dscr < 0 ? "Negative" : `${metrics.dscr.toFixed(2)}x`, target: "≥ 1.25x",
+                    badge: metrics.dscr >= 1.25 ? "Safe" : metrics.dscr >= 1.0 ? "Break-even" : "Risk",
+                    badgeCls: metrics.dscr >= 1.25 ? "bg-emerald-50 text-emerald-700" : metrics.dscr >= 1.0 ? "bg-amber-50 text-amber-700" : "bg-red-50 text-red-700",
+                    bar: Math.min(100, metrics.dscr * 50), barColor: "#F59E0B",
+                  },
+                ].map(({ label, value, target, badge, badgeCls, bar, barColor }) => (
+                  <div key={label} className="rounded-xl border border-border bg-muted/30 p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${badgeCls}`}>{badge}</span>
+                    </div>
+                    <p className="text-2xl font-bold text-foreground">{value}</p>
+                    <div className="mt-2 h-1.5 w-full rounded-full bg-border overflow-hidden">
+                      <div className="h-full rounded-full" style={{ width: `${bar}%`, background: barColor }} />
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1.5">Target: {target}</p>
+                  </div>
+                ))}
+                {[
+                  { label: "Gross Rent Multiplier", value: `${metrics.grm.toFixed(1)}x`, sub: "Lower is better (target: < 12x)", tip: "Purchase Price ÷ Annual Gross Rent." },
+                  { label: "Gross Yield",           value: fmtPct(metrics.grossYield),    sub: "Annual rent / price" },
+                  { label: "LTV Ratio",             value: fmtPct(100 - downPaymentPct, 0), sub: downPaymentPct >= 20 ? "No PMI required" : "PMI likely required" },
+                ].map(({ label, value, sub, tip }) => (
+                  <div key={label} className="rounded-xl border border-border bg-muted/30 p-4">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground mb-2 flex items-center">
+                      {label}{tip && <InfoTip text={tip} side="bottom" />}
+                    </p>
+                    <p className="text-2xl font-bold text-foreground">{value}</p>
+                    <p className="text-xs text-muted-foreground mt-1.5">{sub}</p>
+                  </div>
+                ))}
               </div>
+            </CardContent>
+          </Card>
 
-              <div className="rounded-xl border border-gray-100 bg-[#F8FAFC] p-4">
-                <p className="text-xs uppercase tracking-wide text-[#64748B] mb-2">Gross Yield</p>
-                <p className="text-2xl font-bold text-[#0F172A]">{fmtPct(metrics.grossYield)}</p>
-                <p className="text-xs text-[#94A3B8] mt-1.5">Annual rent / price</p>
+          <Card className="border-0 shadow-sm">
+            <CardHeader className="pb-4">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-muted-foreground" />
+                <CardTitle className="text-base font-semibold">Annual P&amp;L Summary</CardTitle>
               </div>
-
-              <div className="rounded-xl border border-gray-100 bg-[#F8FAFC] p-4">
-                <p className="text-xs uppercase tracking-wide text-[#64748B] mb-2">LTV Ratio</p>
-                <p className="text-2xl font-bold text-[#0F172A]">{fmtPct(100 - downPaymentPct, 0)}</p>
-                <p className="text-xs text-[#94A3B8] mt-1.5">{downPaymentPct >= 20 ? "No PMI required" : "PMI likely required"}</p>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-1">
+                {[
+                  { label: "Gross Rental Income",       value: fmt(monthlyRent * 12),                           sign: "+", accent: "text-emerald-600" },
+                  { label: `Vacancy Loss (${vacancyRate}%)`,  value: fmt(-monthlyRent * 12 * vacancyRate / 100), sign: "−", accent: "text-red-500" },
+                  { label: "Effective Gross Income",    value: fmt(metrics.effectiveGrossIncome),                sign: "",  accent: "text-foreground", bold: true },
+                  { label: "Operating Expenses",        value: fmt(-metrics.annualExpenses),                     sign: "−", accent: "text-red-500" },
+                  { label: "Net Operating Income",      value: fmt(metrics.noi),                                 sign: "",  accent: "text-foreground", bold: true },
+                  { label: "Annual Debt Service",       value: fmt(-metrics.annualDebtService),                  sign: "−", accent: "text-red-500" },
+                  { label: "Annual Cash Flow",          value: fmt(metrics.annualCashFlow),                      sign: "",  accent: metrics.annualCashFlow >= 0 ? "text-emerald-600" : "text-red-500", bold: true },
+                ].map(({ label, value, sign, accent, bold }, i) => (
+                  <div key={label} className={`flex items-center justify-between py-2 ${bold ? "border-t border-dashed border-border mt-1 pt-3" : ""}`}>
+                    <span className={`text-sm ${bold ? "font-semibold text-foreground" : "text-muted-foreground"}`}>{label}</span>
+                    <span className={`text-sm font-semibold ${accent}`}>{sign} {value}</span>
+                  </div>
+                ))}
               </div>
-            </div>
-          </section>
+            </CardContent>
+          </Card>
 
-          {/* Annual P&L Summary */}
-          <section className="rounded-xl border border-gray-100 bg-white p-6 shadow-[0_2px_10px_rgba(15,23,42,0.04)]">
-            <div className="flex items-center gap-2 mb-5">
-              <ShieldCheck className="w-4 h-4 text-[#334155]" />
-              <h3 className="text-base font-semibold text-[#0F172A]">Annual P&amp;L Summary</h3>
-            </div>
-            <div className="space-y-2">
-              {[
-                { label: "Gross Rental Income",       value: fmt(monthlyRent * 12),                color: "#166534", sign: "+" },
-                { label: `Vacancy Loss (${vacancyRate}%)`,  value: fmt(-monthlyRent * 12 * vacancyRate / 100), color: "#991B1B", sign: "−" },
-                { label: "Effective Gross Income",    value: fmt(metrics.effectiveGrossIncome),     color: "#0F172A", sign: "" },
-                { label: "Operating Expenses",        value: fmt(-metrics.annualExpenses),           color: "#991B1B", sign: "−" },
-                { label: "Net Operating Income (NOI)",value: fmt(metrics.noi),                      color: "#1D4ED8", sign: "" },
-                { label: "Annual Debt Service",       value: fmt(-metrics.annualDebtService),        color: "#991B1B", sign: "−" },
-                { label: "Annual Cash Flow",          value: fmt(metrics.annualCashFlow),            color: metrics.annualCashFlow >= 0 ? "#166534" : "#991B1B", sign: "" },
-              ].map(({ label, value, color, sign }, i) => (
-                <div
-                  key={label}
-                  className={`flex items-center justify-between py-2 ${i === 2 || i === 4 || i === 6 ? "border-t border-dashed border-gray-200 pt-3 mt-1" : ""}`}
-                >
-                  <span className={`text-sm ${i === 2 || i === 4 || i === 6 ? "font-semibold text-[#0F172A]" : "text-[#334155]"}`}>{label}</span>
-                  <span className="text-sm font-semibold" style={{ color }}>{sign} {value}</span>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          {/* Info note */}
-          <div className="rounded-xl border border-gray-100 bg-[#F8FAFC] px-5 py-4 flex gap-3">
-            <Info className="w-4 h-4 text-[#64748B] mt-0.5 shrink-0" />
-            <p className="text-sm text-[#64748B] leading-relaxed">
+          <div className="rounded-xl bg-muted/40 px-5 py-4 flex gap-3">
+            <Info className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
+            <p className="text-sm text-muted-foreground leading-relaxed">
               Purchase price pre-filled from your AI valuation. Adjust all inputs to model your specific deal.
               DSCR ≥ 1.25 is typically required for investment property loans.
             </p>
