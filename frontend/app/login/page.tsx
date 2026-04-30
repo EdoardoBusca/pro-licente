@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { Building2, Eye, EyeOff, Loader2, Lock, Mail } from "lucide-react"
+import { Eye, EyeOff, Loader2, Lock, Mail } from "lucide-react"
 
 export default function LoginPage() {
   const router = useRouter()
@@ -48,11 +48,8 @@ export default function LoginPage() {
     <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         {/* Logo */}
-        <div className="flex items-center justify-center gap-3 mb-8">
-          <div className="w-10 h-10 rounded-xl bg-[#0F172A] flex items-center justify-center">
-            <Building2 className="w-5 h-5 text-white" />
-          </div>
-          <span className="text-xl font-bold text-[#0F172A] tracking-tight">Estate Vantage</span>
+        <div className="flex items-center justify-center gap-2.5 mb-8">
+          <img src="/logo-vantagepoint.png" alt="VantagePoint" className="h-12 w-auto object-contain" />
         </div>
 
         {/* Card */}

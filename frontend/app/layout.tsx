@@ -15,7 +15,7 @@ const dmSerif = DM_Serif_Display({
 });
 
 export const metadata: Metadata = {
-  title: 'Estate Vantage | Real Estate Analytics Dashboard',
+  title: 'VantagePoint | Real Estate Analytics Dashboard',
   description: 'Advanced real estate valuation engine and market analytics platform. Get accurate property valuations and market insights.',
   generator: 'v0.app',
   icons: {

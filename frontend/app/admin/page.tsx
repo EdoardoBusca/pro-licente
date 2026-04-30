@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useEffect, useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
@@ -135,7 +135,7 @@ export default function AdminPage() {
           <div className="w-8 h-8 rounded-lg bg-[#0F172A] flex items-center justify-center">
             <Building2 className="w-4 h-4 text-white" />
           </div>
-          <span className="font-bold text-[#0F172A]">Estate Vantage</span>
+          <span className="font-bold text-[#0F172A]">VantagePoint</span>
           <span className="text-[#94A3B8] mx-1">/</span>
           <span className="text-sm font-semibold text-[#334155] flex items-center gap-1.5">
             <ShieldCheck className="w-4 h-4" /> Admin Panel
@@ -350,7 +350,7 @@ export default function AdminPage() {
                 className="w-full flex items-center justify-center gap-2 rounded-lg bg-[#0F172A] text-white text-sm font-semibold py-2.5 hover:bg-[#1E293B] transition-colors disabled:opacity-60"
               >
                 {formLoading
-                  ? <><Loader2 className="w-4 h-4 animate-spin" /> Creating…</>
+                  ? <><Loader2 className="w-4 h-4 animate-spin" /> Creatingâ€¦</>
                   : <><UserPlus className="w-4 h-4" /> Create Account</>}
               </button>
             </form>

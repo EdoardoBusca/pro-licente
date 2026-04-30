@@ -107,8 +107,8 @@ async def start_training(
 ):
     if target.strip() not in _ALLOWED_TARGETS:
         return JSONResponse(status_code=400, content={"status": "failed", "error": f"Invalid target. Allowed: {_ALLOWED_TARGETS}"})
-    if not (1 <= horizon <= 1825):
-        return JSONResponse(status_code=400, content={"status": "failed", "error": "Horizon must be 1–1825 days."})
+    if not (1 <= horizon <= 3650):
+        return JSONResponse(status_code=400, content={"status": "failed", "error": "Horizon must be 1–3650 days."})
     if file.filename:
         ext = os.path.splitext(file.filename.lower())[1]
         if ext not in ALLOWED_FILE_TYPES:

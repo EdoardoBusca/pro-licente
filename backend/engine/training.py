@@ -387,6 +387,41 @@ def train_logic(df: pd.DataFrame, target_col: str, horizon: int = 30, job_id: st
     if job_id is not None:
         save_model_state(job_id, {"model": best_model, "scaler": scaler, "features": processed})
 
+    # ── PROPERTY ROWS (for dataset property selector) ────────────────────────────
+    properties = []
+    try:
+        all_preds = best_model.predict(X_all).tolist()
+        feat_map = {
+            "sq_ft_total":    next((c for c in df.columns if canonical_name(c) == "sq_ft_total"),    None),
+            "bedrooms":       next((c for c in df.columns if canonical_name(c) == "bedrooms"),       None),
+            "bathrooms":      next((c for c in df.columns if canonical_name(c) == "bathrooms"),      None),
+            "condition_score":next((c for c in df.columns if canonical_name(c) == "condition_score"),None),
+            "zip_code":       next((c for c in df.columns if canonical_name(c) == "zip_code"),       None),
+            "property_type":  next((c for c in df.columns if canonical_name(c) == "property_type"),  None),
+            "list_price":     next((c for c in df.columns if canonical_name(c) == "list_price"),     None),
+        }
+        for i in range(min(len(df), 1000)):
+            row: dict = {
+                "property_idx": i,
+                "actual_price": float(y.iloc[i]),
+                "ai_value":     float(all_preds[i]),
+            }
+            for key, col in feat_map.items():
+                if col and col in df.columns:
+                    val = df[col].iloc[i]
+                    if pd.isna(val):
+                        row[key] = None
+                    elif key in ("zip_code", "property_type"):
+                        row[key] = str(val).strip()
+                    else:
+                        try:
+                            row[key] = float(val)
+                        except Exception:
+                            row[key] = None
+            properties.append(row)
+    except Exception as e:
+        print(f"[properties extraction] {e}")
+
     return {
         "winner":    winner_name,
         "r2_score":  float(best_score),
@@ -446,6 +481,7 @@ def train_logic(df: pd.DataFrame, target_col: str, horizon: int = 30, job_id: st
         },
         "arbitrage":   arbitrage,
         "data_quality": data_quality,
+        "properties":  properties,
     }
 
 

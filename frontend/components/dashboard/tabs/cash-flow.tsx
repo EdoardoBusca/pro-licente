@@ -343,7 +343,7 @@ export function CashFlowTab({ result }: CashFlowTabProps) {
                       <tr key={r.year} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
                         <td className="py-2.5 pr-4 font-medium text-foreground">Yr {r.year}</td>
                         <td className="py-2.5 pr-4 text-muted-foreground">{fmtK(r.propertyValue)}</td>
-                        <td className="py-2.5 pr-4 text-blue-600 font-medium">{fmtK(r.equity)}</td>
+                        <td className="py-2.5 pr-4 text-foreground font-medium">{fmtK(r.equity)}</td>
                         <td className="py-2.5 pr-4 text-muted-foreground">{fmtK(r.noi)}</td>
                         <td className={`py-2.5 pr-4 font-medium ${r.cashFlow >= 0 ? "text-emerald-600" : "text-red-500"}`}>
                           {r.cashFlow >= 0 ? "+" : ""}{fmtK(r.cashFlow)}

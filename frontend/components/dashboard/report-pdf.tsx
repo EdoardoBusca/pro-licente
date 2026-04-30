@@ -1,11 +1,11 @@
-"use client"
+﻿"use client"
 
 import {
   Document, Page, Text, View, StyleSheet, pdf, Font,
 } from "@react-pdf/renderer"
 import type { TrainingResult } from "@/src/types"
 
-// ─── Styles ────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Styles â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const C = {
   navy:    "#0F172A",
   slate:   "#334155",
@@ -57,7 +57,7 @@ const s = StyleSheet.create({
   footerText:  { fontSize: 7, color: C.light },
 })
 
-// ─── Helpers ───────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const fmt = (n: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n)
 
@@ -77,7 +77,7 @@ function calcRemainingBalance(principal: number, rate: number, years: number, pa
   return principal * (Math.pow(1 + r, n) - Math.pow(1 + r, p)) / (Math.pow(1 + r, n) - 1)
 }
 
-// ─── Sub-components ────────────────────────────────────────────────────────────
+// â”€â”€â”€ Sub-components â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function SectionTitle({ children }: { children: string }) {
   return <Text style={s.sectionHead}>{children}</Text>
 }
@@ -92,7 +92,7 @@ function KpiBox({ label, value, sub, color }: { label: string; value: string; su
   )
 }
 
-// ─── PDF Document ──────────────────────────────────────────────────────────────
+// â”€â”€â”€ PDF Document â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function ReportDocument({ result, aiAdvice, generatedAt }: {
   result: TrainingResult
   aiAdvice: string | null
@@ -150,21 +150,21 @@ function ReportDocument({ result, aiAdvice, generatedAt }: {
     .trim()
 
   return (
-    <Document title="Estate Vantage — Analytics Report" author="Estate Vantage">
-      {/* ── PAGE 1: Overview ───────────────────────────────────────────────────── */}
+    <Document title="VantagePoint â€” Analytics Report" author="VantagePoint">
+      {/* â”€â”€ PAGE 1: Overview â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <Page size="A4" style={s.page}>
         {/* Cover band */}
         <View style={s.coverBand}>
-          <Text style={s.coverTitle}>Estate Vantage</Text>
+          <Text style={s.coverTitle}>VantagePoint</Text>
           <Text style={s.coverSub}>Real Estate Analytics Report</Text>
-          <Text style={s.coverMeta}>Generated: {generatedAt}   •   Model: {result.winner}   •   Confidence: {confidence}</Text>
+          <Text style={s.coverMeta}>Generated: {generatedAt}   â€¢   Model: {result.winner}   â€¢   Confidence: {confidence}</Text>
         </View>
 
         {/* Model Performance KPIs */}
         <SectionTitle>Model Performance</SectionTitle>
         <View style={s.kpiRow}>
           <KpiBox label="Winner Model"   value={result.winner}                    sub={`${result.train_size} train / ${result.test_size} test rows`} />
-          <KpiBox label="R² Score"       value={result.r2_score.toFixed(3)}       sub="Variance explained" color={result.r2_score >= 0.8 ? C.green : C.amber} />
+          <KpiBox label="RÂ² Score"       value={result.r2_score.toFixed(3)}       sub="Variance explained" color={result.r2_score >= 0.8 ? C.green : C.amber} />
           <KpiBox label="MAPE"           value={fmtPct(result.mape)}              sub="Mean abs % error"   color={result.mape <= 10 ? C.green : result.mape <= 20 ? C.amber : C.red} />
           <KpiBox label="Confidence"     value={confidence}                       sub={`${Math.round(result.composite_confidence_score ?? 0)}% composite`} color={confColor} />
         </View>
@@ -179,13 +179,13 @@ function ReportDocument({ result, aiAdvice, generatedAt }: {
         <SectionTitle>Model Leaderboard</SectionTitle>
         <View style={s.table}>
           <View style={s.thead}>
-            {["Model", "R²", "MAPE", "MAE", "RMSE"].map((h, i) => (
+            {["Model", "RÂ²", "MAPE", "MAE", "RMSE"].map((h, i) => (
               <Text key={h} style={[s.th, { flex: i === 0 ? 2 : 1 }]}>{h}</Text>
             ))}
           </View>
           {(result.leaderboard ?? []).map((row, i) => (
             <View key={i} style={i % 2 === 0 ? s.tr : s.trAlt}>
-              <Text style={[s.tdBold, { flex: 2 }]}>{row.name}{row.name === result.winner ? " ★" : ""}</Text>
+              <Text style={[s.tdBold, { flex: 2 }]}>{row.name}{row.name === result.winner ? " â˜…" : ""}</Text>
               <Text style={[s.td, { flex: 1 }]}>{row.r2.toFixed(3)}</Text>
               <Text style={[s.td, { flex: 1 }]}>{fmtPct(row.mape)}</Text>
               <Text style={[s.td, { flex: 1 }]}>{fmtK(row.mae)}</Text>
@@ -204,12 +204,12 @@ function ReportDocument({ result, aiAdvice, generatedAt }: {
         </View>
 
         <View style={s.footer}>
-          <Text style={s.footerText}>Estate Vantage Analytics Report</Text>
+          <Text style={s.footerText}>VantagePoint Analytics Report</Text>
           <Text style={s.footerText}>Page 1</Text>
         </View>
       </Page>
 
-      {/* ── PAGE 2: Signals & Features ─────────────────────────────────────────── */}
+      {/* â”€â”€ PAGE 2: Signals & Features â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <Page size="A4" style={s.page}>
         {/* Buy Signals */}
         <SectionTitle>Top Buy Opportunities (Undervalued Properties)</SectionTitle>
@@ -228,7 +228,7 @@ function ReportDocument({ result, aiAdvice, generatedAt }: {
                 <Text style={[s.td,     { flex: 1 }]}>{fmtK(sig.list_price)}</Text>
                 <Text style={[s.tdBold, { flex: 1, color: C.green }]}>{fmtK(sig.ai_value)}</Text>
                 <Text style={[s.tdBold, { flex: 0.8, color: C.green }]}>+{fmtPct(sig.delta_pct)}</Text>
-                <Text style={[s.td,     { flex: 1 }]}>{sig.potential_gain ? fmtK(sig.potential_gain) : "—"}</Text>
+                <Text style={[s.td,     { flex: 1 }]}>{sig.potential_gain ? fmtK(sig.potential_gain) : "â€”"}</Text>
               </View>
             ))}
           </View>
@@ -251,7 +251,7 @@ function ReportDocument({ result, aiAdvice, generatedAt }: {
                 <Text style={[s.td,     { flex: 1 }]}>{fmtK(sig.list_price)}</Text>
                 <Text style={[s.tdBold, { flex: 1, color: C.red }]}>{fmtK(sig.ai_value)}</Text>
                 <Text style={[s.tdBold, { flex: 0.8, color: C.red }]}>{fmtPct(sig.delta_pct)}</Text>
-                <Text style={[s.td,     { flex: 1 }]}>{sig.potential_loss ? fmtK(sig.potential_loss) : "—"}</Text>
+                <Text style={[s.td,     { flex: 1 }]}>{sig.potential_loss ? fmtK(sig.potential_loss) : "â€”"}</Text>
               </View>
             ))}
           </View>
@@ -272,23 +272,23 @@ function ReportDocument({ result, aiAdvice, generatedAt }: {
               <Text style={[s.td,     { flex: 1 }]}>
                 {result.correlation_lookup?.[f.feature] != null
                   ? result.correlation_lookup[f.feature].toFixed(3)
-                  : "—"}
+                  : "â€”"}
               </Text>
             </View>
           ))}
         </View>
 
         <View style={s.footer}>
-          <Text style={s.footerText}>Estate Vantage Analytics Report</Text>
+          <Text style={s.footerText}>VantagePoint Analytics Report</Text>
           <Text style={s.footerText}>Page 2</Text>
         </View>
       </Page>
 
-      {/* ── PAGE 3: Investment & Cash Flow ─────────────────────────────────────── */}
+      {/* â”€â”€ PAGE 3: Investment & Cash Flow â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <Page size="A4" style={s.page}>
         <SectionTitle>Investment Metrics (Based on Dataset Avg Price)</SectionTitle>
         <Text style={[s.kpiSub, { marginBottom: 10 }]}>
-          Calculated on avg price {fmt(price)} · 20% down · 7% rate · 30yr · rent {fmt(rent)}/mo · 5% vacancy
+          Calculated on avg price {fmt(price)} Â· 20% down Â· 7% rate Â· 30yr Â· rent {fmt(rent)}/mo Â· 5% vacancy
         </Text>
         <View style={s.kpiRow}>
           <KpiBox label="Cap Rate"         value={fmtPct(capRate)}      color={capRate >= 8 ? C.green : capRate >= 5 ? C.amber : C.red}  sub="NOI / Property Price" />
@@ -306,7 +306,7 @@ function ReportDocument({ result, aiAdvice, generatedAt }: {
         {/* 10-Year Cash Flow Table */}
         <SectionTitle>10-Year Cash Flow Projection</SectionTitle>
         <Text style={[s.kpiSub, { marginBottom: 8 }]}>
-          Appreciation: {fmtPct(appRate)} (dataset YoY avg) · Rent growth 2.5%/yr · Expense growth 3%/yr
+          Appreciation: {fmtPct(appRate)} (dataset YoY avg) Â· Rent growth 2.5%/yr Â· Expense growth 3%/yr
         </Text>
         <View style={s.table}>
           <View style={s.thead}>
@@ -328,12 +328,12 @@ function ReportDocument({ result, aiAdvice, generatedAt }: {
         </View>
 
         <View style={s.footer}>
-          <Text style={s.footerText}>Estate Vantage Analytics Report</Text>
+          <Text style={s.footerText}>VantagePoint Analytics Report</Text>
           <Text style={s.footerText}>Page 3</Text>
         </View>
       </Page>
 
-      {/* ── PAGE 4: AI Advice ──────────────────────────────────────────────────── */}
+      {/* â”€â”€ PAGE 4: AI Advice â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <Page size="A4" style={s.page}>
         <SectionTitle>AI Investment Intelligence</SectionTitle>
         <Text style={[s.kpiSub, { marginBottom: 12 }]}>
@@ -378,7 +378,7 @@ function ReportDocument({ result, aiAdvice, generatedAt }: {
         </View>
 
         <View style={s.footer}>
-          <Text style={s.footerText}>Estate Vantage Analytics Report — Confidential</Text>
+          <Text style={s.footerText}>VantagePoint Analytics Report â€” Confidential</Text>
           <Text style={s.footerText}>Page 4</Text>
         </View>
       </Page>
@@ -386,7 +386,7 @@ function ReportDocument({ result, aiAdvice, generatedAt }: {
   )
 }
 
-// ─── Export trigger ────────────────────────────────────────────────────────────
+// â”€â”€â”€ Export trigger â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export async function downloadPDF(result: TrainingResult, aiAdvice: string | null) {
   const generatedAt = new Date().toLocaleString("en-US", {
     year: "numeric", month: "long", day: "numeric",

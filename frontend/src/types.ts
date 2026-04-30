@@ -134,6 +134,19 @@ export interface ProjectionPoint {
   is_historical: boolean;
 }
 
+export interface PropertyRow {
+  property_idx:    number
+  actual_price:    number
+  ai_value:        number
+  sq_ft_total?:    number | null
+  bedrooms?:       number | null
+  bathrooms?:      number | null
+  condition_score?:number | null
+  zip_code?:       string | null
+  property_type?:  string | null
+  list_price?:     number | null
+}
+
 export interface PredictRequest {
   sq_ft_total: number;
   bedrooms?: number;
@@ -193,4 +206,5 @@ export interface TrainingResult {
   market_dynamics:         MarketDynamics;
   arbitrage:               Arbitrage;
   data_quality:            DataQuality;
+  properties?:             PropertyRow[];
 }

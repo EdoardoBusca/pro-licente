@@ -9,16 +9,13 @@ interface HeroProps {
 
 export function Hero({ onEnterDashboard }: HeroProps) {
   return (
-    <section className="min-h-screen flex flex-col">
+    <section className="min-h-screen flex flex-col bg-background">
       {/* Header */}
-      <header className="flex items-center justify-between px-8 lg:px-16 py-6">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-foreground rounded-lg flex items-center justify-center">
-            <Building2 className="w-5 h-5 text-background" />
-          </div>
-          <span className="font-semibold text-lg tracking-tight">Estate Vantage</span>
+      <header className="flex items-center justify-between px-8 lg:px-16 py-5 border-b border-border/50">
+        <div className="flex items-center">
+          <img src="/logo-vantagepoint.png" alt="VantagePoint" className="h-10 w-auto object-contain" />
         </div>
-        <Button 
+        <Button
           onClick={onEnterDashboard}
           className="rounded-full px-6"
         >
@@ -27,12 +24,15 @@ export function Hero({ onEnterDashboard }: HeroProps) {
       </header>
 
       {/* Hero Content */}
-      <div className="flex-1 flex flex-col items-center justify-center px-8 lg:px-16 pb-20">
-        {/* Badge */}
-        <div className="mb-8 px-4 py-2 bg-secondary rounded-full flex items-center gap-2 text-sm">
-          <span className="w-2 h-2 bg-estate-green rounded-full animate-pulse" />
-          <span className="text-muted-foreground">Now with AI-powered predictions</span>
-          <ArrowRight className="w-4 h-4 text-muted-foreground" />
+      <div className="flex-1 flex flex-col items-center justify-center px-8 lg:px-16 pb-20 pt-12">
+
+        {/* Logo — prominent center placement */}
+        <div className="mb-10 flex flex-col items-center gap-4">
+          <img src="/logo-vantagepoint.png" alt="VantagePoint" className="h-44 w-auto object-contain" />
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <span className="w-2 h-2 bg-estate-green rounded-full animate-pulse" />
+            Now with AI-powered predictions
+          </div>
         </div>
 
         {/* Main Heading */}
@@ -44,7 +44,7 @@ export function Hero({ onEnterDashboard }: HeroProps) {
 
         {/* Subtitle */}
         <p className="mt-6 text-lg md:text-xl text-muted-foreground text-center max-w-2xl text-pretty">
-          Deploy our advanced ML valuation engine designed for institutional real estate. 
+          Deploy our advanced ML valuation engine designed for institutional real estate.
           Our models power valuations for portfolios representing $50B+ in assets.
         </p>
 
@@ -62,17 +62,17 @@ export function Hero({ onEnterDashboard }: HeroProps) {
 
         {/* Feature Cards */}
         <div className="mt-20 grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-4xl">
-          <FeatureCard 
+          <FeatureCard
             icon={<BarChart3 className="w-6 h-6" />}
             title="Automated Valuation"
             description="ML models trained on 10M+ transactions for institutional-grade accuracy"
           />
-          <FeatureCard 
+          <FeatureCard
             icon={<TrendingUp className="w-6 h-6" />}
             title="Market Intelligence"
             description="Real-time market dynamics and liquidity scoring at your fingertips"
           />
-          <FeatureCard 
+          <FeatureCard
             icon={<Building2 className="w-6 h-6" />}
             title="Portfolio Analytics"
             description="Deep insights into your holdings with actionable recommendations"
@@ -85,15 +85,15 @@ export function Hero({ onEnterDashboard }: HeroProps) {
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <span>LEARN OUR</span>
           <span className="font-medium text-foreground">METHODOLOGY</span>
-          <div className="w-8 h-8 rounded-full border border-estate-red flex items-center justify-center ml-2">
-            <ArrowRight className="w-3 h-3 text-estate-red" />
+          <div className="w-8 h-8 rounded-full border border-border flex items-center justify-center ml-2 hover:border-foreground/40 transition-colors">
+            <ArrowRight className="w-3 h-3" />
           </div>
         </div>
         <div className="hidden md:flex items-center gap-2 text-sm text-muted-foreground">
           <span>EXPLORE</span>
           <span className="font-medium text-foreground">CASE STUDIES</span>
-          <div className="w-8 h-8 rounded-full border border-estate-red flex items-center justify-center ml-2">
-            <ArrowRight className="w-3 h-3 text-estate-red" />
+          <div className="w-8 h-8 rounded-full border border-border flex items-center justify-center ml-2 hover:border-foreground/40 transition-colors">
+            <ArrowRight className="w-3 h-3" />
           </div>
         </div>
       </div>

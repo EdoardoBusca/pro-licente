@@ -3,7 +3,7 @@
 import { useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import {
-  Upload, FileSpreadsheet, Check, Building2, Sparkles, X,
+  Upload, FileSpreadsheet, Check, Sparkles, X,
   Loader2, Wand2, LogOut, User, ShieldCheck, ChevronRight,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -84,15 +84,9 @@ export function Sidebar({
     <aside className="w-80 min-h-screen bg-card border-r border-border flex flex-col">
 
       {/* ── Logo ───────────────────────────────────────────────────────────── */}
-      <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-foreground rounded-lg flex items-center justify-center shrink-0">
-            <Building2 className="w-4 h-4 text-background" />
-          </div>
-          <div>
-            <p className="text-sm font-semibold tracking-tight leading-none">Estate Vantage</p>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Analytics Platform</p>
-          </div>
+      <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+        <div className="flex-1 overflow-hidden flex items-center">
+          <img src="/logo-vantagepoint.png" alt="VantagePoint" className="w-full h-auto object-contain object-left" />
         </div>
         {onCollapse && (
           <button onClick={onCollapse}
@@ -269,7 +263,7 @@ export function Sidebar({
           {currentUser.role === "admin" && (
             <button
               onClick={() => router.push("/admin")}
-              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 transition-colors"
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold text-foreground bg-muted hover:bg-muted/80 transition-colors"
             >
               <ShieldCheck className="w-3.5 h-3.5" />
               Admin Panel

@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Building2 } from "lucide-react";
 
 const LOADING_TEXTS = [
   "Initializing valuation engine...",
@@ -44,10 +43,7 @@ export function LoadingTransition({ onComplete }: LoadingTransitionProps) {
     <div className="fixed inset-0 bg-foreground z-50 flex flex-col items-center justify-center">
       {/* Logo */}
       <div className="mb-12 flex items-center gap-3">
-        <div className="w-12 h-12 bg-background rounded-xl flex items-center justify-center">
-          <Building2 className="w-7 h-7 text-foreground" />
-        </div>
-        <span className="text-2xl font-semibold text-background tracking-tight">Estate Vantage</span>
+        <img src="/logo-vantagepoint.png" alt="VantagePoint" className="h-16 w-auto object-contain brightness-0 invert" />
       </div>
 
       {/* Progress Bar */}
