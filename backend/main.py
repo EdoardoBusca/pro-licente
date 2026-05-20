@@ -49,9 +49,20 @@ from engine import get_model_state, train_logic
 
 app = FastAPI()
 
+_origins = [
+    "http://localhost:3000",
+    os.getenv("FRONTEND_ORIGIN", ""),
+]
+# Accept any Vercel deployment URL for this project
+_vercel_domain = os.getenv("VERCEL_DOMAIN", "")  # e.g. vantagepoint.vercel.app
+if _vercel_domain:
+    _origins.append(f"https://{_vercel_domain}")
+    _origins.append(f"https://{_vercel_domain.replace('.vercel.app', '-*.vercel.app')}")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")],
+    allow_origins=[o for o in _origins if o],
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

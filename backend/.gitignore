@@ -17,3 +17,4 @@ backend/models/*
 # Node / React 
 node_modules/
 dist/
+catboost_info/
