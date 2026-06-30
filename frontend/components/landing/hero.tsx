@@ -1,114 +1,405 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
-import { ArrowRight, BarChart3, TrendingUp, Building2 } from "lucide-react";
+import { useEffect, useRef, useCallback } from "react";
 
 interface HeroProps {
   onEnterDashboard: () => void;
 }
 
+const FRAME_COUNT = 60;
+const FRAME_PATH  = (i: number) =>
+  `/poza/video site_${String(i).padStart(3, "0")}.jpg`;
+
+const PHASES = [
+  {
+    id: "phase-1",
+    start: 0,
+    end: 17,
+    pill: "AI-Powered",
+    heading: "See the market\nclearly.",
+    body: "VantagePoint turns raw property data into actionable intelligence — pricing, cash flow, and market trends in one place.",
+    cta: false,
+  },
+  {
+    id: "phase-2",
+    start: 18,
+    end: 39,
+    pill: "Predictive Analytics",
+    heading: "Know the value\nbefore you buy.",
+    body: "Our AI models train on your own dataset and surface the hidden signals that drive real estate prices.",
+    cta: false,
+  },
+  {
+    id: "phase-3",
+    start: 40,
+    end: 59,
+    pill: "Ready to invest?",
+    heading: "Your edge\nstarts here.",
+    body: "Upload a dataset, train a model, and start making smarter real estate decisions in minutes.",
+    cta: true,
+  },
+];
+
 export function Hero({ onEnterDashboard }: HeroProps) {
+  const canvasRef      = useRef<HTMLCanvasElement>(null);
+  const imagesRef      = useRef<HTMLImageElement[]>([]);
+  const frameRef       = useRef(0);
+  const rafRef         = useRef(false);
+  const phaseRefs      = useRef<(HTMLDivElement | null)[]>([]);
+  const progressFillRef = useRef<HTMLDivElement>(null);
+  const scrollHintRef  = useRef<HTMLDivElement>(null);
+
+  // ── Draw one frame with object-fit: cover ──────────────────────────────────
+  // Coordinates are in logical (CSS) pixels; the context transform handles dpr.
+  const drawFrame = useCallback((index: number) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const img = imagesRef.current[index];
+    if (!img?.complete || img.naturalWidth === 0) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const cw  = canvas.width  / dpr;   // logical width
+    const ch  = canvas.height / dpr;   // logical height
+    const iw  = img.naturalWidth;
+    const ih  = img.naturalHeight;
+    const scale = Math.max(cw / iw, ch / ih);
+    const sw    = iw * scale;
+    const sh    = ih * scale;
+    ctx.clearRect(0, 0, cw, ch);
+    ctx.drawImage(img, (cw - sw) / 2, (ch - sh) / 2, sw, sh);
+  }, []);
+
+  // ── Update phase visibility ─────────────────────────────────────────────────
+  const updatePhases = useCallback((frameIndex: number) => {
+    PHASES.forEach((phase, i) => {
+      const el = phaseRefs.current[i];
+      if (!el) return;
+      const active = frameIndex >= phase.start && frameIndex <= phase.end;
+      el.style.opacity      = active ? "1" : "0";
+      el.style.transform    = active ? "translateY(0)" : "translateY(18px)";
+    });
+  }, []);
+
+  // ── Resize canvas to device pixels ─────────────────────────────────────────
+  const resizeCanvas = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const dpr = window.devicePixelRatio || 1;
+    const w   = window.innerWidth;
+    const h   = window.innerHeight;
+    canvas.width        = Math.round(w * dpr);
+    canvas.height       = Math.round(h * dpr);
+    canvas.style.width  = w + "px";
+    canvas.style.height = h + "px";
+    // Scale the context so every drawImage call works in logical CSS pixels
+    // while the underlying buffer has full physical-pixel resolution.
+    const ctx = canvas.getContext("2d");
+    if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    drawFrame(frameRef.current);
+  }, [drawFrame]);
+
+  // ── Render tick ─────────────────────────────────────────────────────────────
+  const render = useCallback(() => {
+    rafRef.current = false;
+    const scrollTop    = window.scrollY;
+    const scrollHeight = document.documentElement.scrollHeight - window.innerHeight;
+    const progress     = Math.min(Math.max(scrollTop / scrollHeight, 0), 1);
+    const frameIndex   = Math.min(Math.round(progress * (FRAME_COUNT - 1)), FRAME_COUNT - 1);
+
+    if (frameIndex !== frameRef.current) {
+      frameRef.current = frameIndex;
+      drawFrame(frameIndex);
+    }
+
+    updatePhases(frameRef.current);
+
+    if (progressFillRef.current) {
+      progressFillRef.current.style.width = (progress * 100).toFixed(1) + "%";
+    }
+    if (scrollHintRef.current) {
+      scrollHintRef.current.style.opacity = scrollTop > 40 ? "0" : "1";
+    }
+  }, [drawFrame, updatePhases]);
+
+  const onScroll = useCallback(() => {
+    if (!rafRef.current) {
+      rafRef.current = true;
+      requestAnimationFrame(render);
+    }
+  }, [render]);
+
+  useEffect(() => {
+    // Preload all frames
+    const imgs: HTMLImageElement[] = [];
+    for (let i = 0; i < FRAME_COUNT; i++) {
+      const img = new Image();
+      img.src = FRAME_PATH(i);
+      img.onload = () => {
+        // Redraw first frame once it loads
+        if (i === 0) drawFrame(0);
+      };
+      imgs.push(img);
+    }
+    imagesRef.current = imgs;
+
+    resizeCanvas();
+    updatePhases(0);
+
+    window.addEventListener("scroll",  onScroll, { passive: true });
+    window.addEventListener("resize",  resizeCanvas);
+    return () => {
+      window.removeEventListener("scroll",  onScroll);
+      window.removeEventListener("resize",  resizeCanvas);
+    };
+  }, [resizeCanvas, onScroll, drawFrame, updatePhases]);
+
   return (
-    <section className="min-h-screen flex flex-col bg-background">
-      {/* Header */}
-      <header className="flex items-center justify-between px-8 lg:px-16 py-5 border-b border-border/50">
-        <div className="flex items-center">
-          <img src="/logo-vantagepoint.png" alt="VantagePoint" className="h-10 w-auto object-contain" />
-        </div>
-        <Button
-          onClick={onEnterDashboard}
-          className="rounded-full px-6"
-        >
-          Launch App
-        </Button>
-      </header>
+    <>
+      <style>{`
+        .vp-scroll-container { height: 500vh; position: relative; }
 
-      {/* Hero Content */}
-      <div className="flex-1 flex flex-col items-center justify-center px-8 lg:px-16 pb-20 pt-12">
+        .vp-sticky {
+          position: sticky;
+          top: 0;
+          height: 100vh;
+          width: 100%;
+          overflow: hidden;
+          background: #000;
+        }
 
-        {/* Logo — prominent center placement */}
-        <div className="mb-10 flex flex-col items-center gap-4">
-          <img src="/logo-vantagepoint.png" alt="VantagePoint" className="h-44 w-auto object-contain" />
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <span className="w-2 h-2 bg-estate-green rounded-full animate-pulse" />
-            Now with AI-powered predictions
+        .vp-canvas {
+          display: block;
+          position: absolute;
+          inset: 0;
+          width: 100%;
+          height: 100%;
+        }
+
+        /* Header bar */
+        .vp-header {
+          position: absolute;
+          top: 0; left: 0; right: 0;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 1.25rem 2rem;
+          z-index: 20;
+          background: linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, transparent 100%);
+        }
+        .vp-logo {
+          height: 2rem;
+          width: auto;
+          filter: brightness(0) invert(1);
+        }
+        .vp-launch-btn {
+          padding: 0.55em 1.4em;
+          border-radius: 999px;
+          background: #fff;
+          color: #000;
+          font-size: 0.875rem;
+          font-weight: 600;
+          border: none;
+          cursor: pointer;
+          transition: background 0.2s, transform 0.15s;
+          letter-spacing: 0.01em;
+        }
+        .vp-launch-btn:hover { background: #e5e5e5; transform: scale(1.03); }
+
+        /* Overlay */
+        .vp-overlay {
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+          z-index: 10;
+        }
+
+        /* Phase text blocks */
+        .vp-phase {
+          position: absolute;
+          inset: 0;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          padding: 0 8vw;
+          opacity: 0;
+          transform: translateY(18px);
+          transition: opacity 0.55s cubic-bezier(0.22,1,0.36,1),
+                      transform 0.55s cubic-bezier(0.22,1,0.36,1);
+          will-change: opacity, transform;
+        }
+
+        .vp-pill {
+          display: inline-block;
+          margin-bottom: 1rem;
+          padding: 0.3em 0.9em;
+          border-radius: 999px;
+          background: rgba(34,197,94,0.18);
+          border: 1px solid rgba(34,197,94,0.4);
+          color: #4ade80;
+          font-size: 0.72rem;
+          font-weight: 600;
+          letter-spacing: 0.14em;
+          text-transform: uppercase;
+          width: fit-content;
+        }
+
+        .vp-heading {
+          font-size: clamp(2.2rem, 5.5vw, 5rem);
+          font-weight: 800;
+          letter-spacing: -0.03em;
+          line-height: 1.05;
+          color: #fff;
+          text-shadow: 0 2px 40px rgba(0,0,0,0.5);
+          white-space: pre-line;
+          max-width: 12ch;
+        }
+
+        .vp-body {
+          margin-top: 1.1rem;
+          font-size: clamp(0.9rem, 1.5vw, 1.15rem);
+          color: rgba(255,255,255,0.68);
+          max-width: 40ch;
+          line-height: 1.7;
+          text-shadow: 0 1px 20px rgba(0,0,0,0.5);
+        }
+
+        .vp-cta {
+          pointer-events: all;
+          margin-top: 2rem;
+          display: inline-flex;
+          align-items: center;
+          gap: 0.5rem;
+          padding: 0.85em 2em;
+          border-radius: 999px;
+          background: #22c55e;
+          color: #000;
+          font-size: 0.95rem;
+          font-weight: 700;
+          border: none;
+          cursor: pointer;
+          transition: background 0.2s, transform 0.2s;
+          box-shadow: 0 0 30px rgba(34,197,94,0.4);
+          width: fit-content;
+        }
+        .vp-cta:hover { background: #4ade80; transform: scale(1.04); }
+
+        /* Progress bar */
+        .vp-progress {
+          position: absolute;
+          bottom: 2.2rem;
+          left: 50%;
+          transform: translateX(-50%);
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 0.45rem;
+          z-index: 20;
+          pointer-events: none;
+        }
+        .vp-track {
+          width: 100px;
+          height: 2px;
+          background: rgba(255,255,255,0.12);
+          border-radius: 2px;
+          overflow: hidden;
+        }
+        .vp-fill {
+          height: 100%;
+          width: 0%;
+          background: #22c55e;
+          border-radius: 2px;
+          transition: width 0.08s linear;
+        }
+
+        /* Scroll hint */
+        .vp-scroll-hint {
+          position: absolute;
+          bottom: 2.5rem;
+          left: 50%;
+          transform: translateX(-50%);
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 0.4rem;
+          z-index: 20;
+          pointer-events: none;
+          transition: opacity 0.4s;
+        }
+        .vp-scroll-hint span {
+          font-size: 0.62rem;
+          letter-spacing: 0.2em;
+          text-transform: uppercase;
+          color: rgba(255,255,255,0.35);
+        }
+        .vp-arrow {
+          width: 18px; height: 18px;
+          border-right: 2px solid rgba(255,255,255,0.3);
+          border-bottom: 2px solid rgba(255,255,255,0.3);
+          transform: rotate(45deg);
+          animation: vp-bounce 1.6s ease-in-out infinite;
+        }
+        @keyframes vp-bounce {
+          0%,100% { transform: rotate(45deg) translateY(0); }
+          50%      { transform: rotate(45deg) translateY(5px); }
+        }
+      `}</style>
+
+      <div className="vp-scroll-container">
+        <div className="vp-sticky">
+
+          {/* Canvas */}
+          <canvas ref={canvasRef} className="vp-canvas" />
+
+          {/* Header */}
+          <header className="vp-header">
+            <img src="/logo-vantagepoint.png" alt="VantagePoint" className="vp-logo" />
+            <button className="vp-launch-btn" onClick={onEnterDashboard}>
+              Launch App
+            </button>
+          </header>
+
+          {/* Overlay phases */}
+          <div className="vp-overlay">
+            {PHASES.map((phase, i) => (
+              <div
+                key={phase.id}
+                className="vp-phase"
+                ref={(el) => { phaseRefs.current[i] = el; }}
+                style={{ opacity: i === 0 ? 1 : 0, transform: i === 0 ? "translateY(0)" : "translateY(18px)" }}
+              >
+                <span className="vp-pill">{phase.pill}</span>
+                <h1 className="vp-heading">{phase.heading}</h1>
+                <p className="vp-body">{phase.body}</p>
+                {phase.cta && (
+                  <button className="vp-cta" onClick={onEnterDashboard}>
+                    Get started
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"
+                      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M3 8h10M9 4l4 4-4 4"/>
+                    </svg>
+                  </button>
+                )}
+              </div>
+            ))}
           </div>
-        </div>
 
-        {/* Main Heading */}
-        <h1 className="font-serif text-5xl md:text-6xl lg:text-7xl text-center max-w-4xl leading-[1.1] tracking-tight text-balance">
-          Real Estate Valuation
-          <br />
-          <span className="text-muted-foreground">meets precision</span>
-        </h1>
+          {/* Scroll hint */}
+          <div className="vp-scroll-hint" ref={scrollHintRef}>
+            <span>Scroll</span>
+            <div className="vp-arrow" />
+          </div>
 
-        {/* Subtitle */}
-        <p className="mt-6 text-lg md:text-xl text-muted-foreground text-center max-w-2xl text-pretty">
-          Deploy our advanced ML valuation engine designed for institutional real estate.
-          Our models power valuations for portfolios representing $50B+ in assets.
-        </p>
+          {/* Progress */}
+          <div className="vp-progress">
+            <div className="vp-track">
+              <div className="vp-fill" ref={progressFillRef} />
+            </div>
+          </div>
 
-        {/* CTA */}
-        <div className="mt-10">
-          <Button
-            size="lg"
-            onClick={onEnterDashboard}
-            className="rounded-full px-8 py-6 text-base gap-2 group"
-          >
-            Request Access
-            <ArrowRight className="w-4 h-4 transition-transform duration-300 group-hover:translate-x-1" />
-          </Button>
-        </div>
-
-        {/* Feature Cards */}
-        <div className="mt-20 grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-4xl">
-          <FeatureCard
-            icon={<BarChart3 className="w-6 h-6" />}
-            title="Automated Valuation"
-            description="ML models trained on 10M+ transactions for institutional-grade accuracy"
-          />
-          <FeatureCard
-            icon={<TrendingUp className="w-6 h-6" />}
-            title="Market Intelligence"
-            description="Real-time market dynamics and liquidity scoring at your fingertips"
-          />
-          <FeatureCard
-            icon={<Building2 className="w-6 h-6" />}
-            title="Portfolio Analytics"
-            description="Deep insights into your holdings with actionable recommendations"
-          />
         </div>
       </div>
-
-      {/* Bottom Links */}
-      <div className="flex justify-between items-center px-8 lg:px-16 py-8 border-t border-border">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <span>LEARN OUR</span>
-          <span className="font-medium text-foreground">METHODOLOGY</span>
-          <div className="w-8 h-8 rounded-full border border-border flex items-center justify-center ml-2 hover:border-foreground/40 transition-colors">
-            <ArrowRight className="w-3 h-3" />
-          </div>
-        </div>
-        <div className="hidden md:flex items-center gap-2 text-sm text-muted-foreground">
-          <span>EXPLORE</span>
-          <span className="font-medium text-foreground">CASE STUDIES</span>
-          <div className="w-8 h-8 rounded-full border border-border flex items-center justify-center ml-2 hover:border-foreground/40 transition-colors">
-            <ArrowRight className="w-3 h-3" />
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function FeatureCard({ icon, title, description }: { icon: React.ReactNode; title: string; description: string }) {
-  return (
-    <div className="p-6 rounded-2xl bg-card border border-border hover:border-foreground/20 transition-all duration-300 hover:shadow-lg group">
-      <div className="w-12 h-12 rounded-xl bg-secondary flex items-center justify-center mb-4 group-hover:bg-foreground group-hover:text-background transition-colors duration-300">
-        {icon}
-      </div>
-      <h3 className="font-medium text-base mb-2">{title}</h3>
-      <p className="text-sm text-muted-foreground leading-relaxed">{description}</p>
-    </div>
+    </>
   );
 }

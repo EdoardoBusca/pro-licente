@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect } from "react"
 import { Hero } from "@/components/landing/hero"
 import { LoadingTransition } from "@/components/landing/loading-transition"
+import { LoginModal } from "@/components/landing/login-modal"
 import { Sidebar } from "@/components/dashboard/sidebar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ModelStatsTab } from "@/components/dashboard/tabs/model-stats"
@@ -26,6 +27,8 @@ import type { TrainingResult, ColumnMappingResult } from "@/src/types"
 import type { ConfirmedMapping } from "@/components/dashboard/column-mapper"
 
 type AppState = "landing" | "loading" | "dashboard"
+
+
 
 // Parse column headers from a CSV/XLSX file in the browser without a library.
 // Used as a fallback when the backend is unreachable so the mapper dropdowns
@@ -52,8 +55,9 @@ async function readFileCsvHeaders(file: File): Promise<string[]> {
 
 export default function App() {
   // Always start with safe server-side defaults — load from storage after mount
-  const [appState,  setAppState]  = useState<AppState>("landing")
-  const [activeTab, setActiveTab] = useState("valuation-engine")
+  const [appState,       setAppState]       = useState<AppState>("landing")
+  const [showLoginModal, setShowLoginModal] = useState(false)
+  const [activeTab,      setActiveTab]      = useState("valuation-engine")
   const [sidebarOpen, setSidebarOpen] = useState(true)
 
   // Training state
@@ -85,12 +89,17 @@ export default function App() {
 
   // Restore persisted session after mount (client-only)
   useEffect(() => {
-    // Auth guard — redirect to login if no token
+    // Theme — always apply regardless of auth
+    const savedDark = localStorage.getItem("ev-dark")
+    const prefersDark = savedDark !== null
+      ? savedDark === "1"
+      : window.matchMedia("(prefers-color-scheme: dark)").matches
+    setIsDark(prefersDark)
+    document.documentElement.classList.toggle("dark", prefersDark)
+
+    // If the user already has a token + a saved session, skip straight to dashboard
     const token = localStorage.getItem("ev-token")
-    if (!token) {
-      window.location.href = "/login"
-      return
-    }
+    if (!token) return  // no token → stay on landing, let them browse freely
 
     try {
       const savedResult = sessionStorage.getItem("ev-result")
@@ -101,14 +110,6 @@ export default function App() {
       }
       if (savedJobId) setJobId(savedJobId)
     } catch { /* ignore */ }
-
-    // Theme
-    const savedDark = localStorage.getItem("ev-dark")
-    const prefersDark = savedDark !== null
-      ? savedDark === "1"
-      : window.matchMedia("(prefers-color-scheme: dark)").matches
-    setIsDark(prefersDark)
-    document.documentElement.classList.toggle("dark", prefersDark)
   }, [])
 
   const handleToggleDark = useCallback(() => {
@@ -120,7 +121,18 @@ export default function App() {
     })
   }, [])
 
+  // Auth gate: if no token show the login modal; if already authed go straight to loading
   const handleEnterDashboard = useCallback(() => {
+    const token = localStorage.getItem("ev-token")
+    if (!token) {
+      setShowLoginModal(true)
+    } else {
+      setAppState("loading")
+    }
+  }, [])
+
+  const handleLoginSuccess = useCallback(() => {
+    setShowLoginModal(false)
     setAppState("loading")
   }, [])
 
@@ -263,7 +275,16 @@ export default function App() {
   }, [result])
 
   if (appState === "landing") {
-    return <Hero onEnterDashboard={handleEnterDashboard} />
+    return (
+      <>
+        <Hero onEnterDashboard={handleEnterDashboard} />
+        <LoginModal
+          show={showLoginModal}
+          onClose={() => setShowLoginModal(false)}
+          onLoginSuccess={handleLoginSuccess}
+        />
+      </>
+    )
   }
 
   if (appState === "loading") {

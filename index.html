@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VantagePoint — AI Real Estate Analytics</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html { scroll-behavior: auto; }
+
+    body {
+      background: #000;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      overflow-x: hidden;
+    }
+
+    /* ── Scroll container: gives the scroll "travel" distance ── */
+    #scroll-container {
+      height: 500vh;
+      position: relative;
+    }
+
+    /* ── Sticky wrapper: locks canvas to viewport ── */
+    #sticky-wrapper {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      width: 100%;
+      overflow: hidden;
+    }
+
+    /* ── Full-screen canvas ── */
+    #canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* ── Overlay sits on top of the canvas ── */
+    #overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 0 8vw;
+      pointer-events: none;
+    }
+
+    /* ── Text block ── */
+    .text-block {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 0 8vw;
+      opacity: 0;
+      transform: translateY(18px);
+      transition: opacity 0.55s cubic-bezier(0.22, 1, 0.36, 1),
+                  transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+      will-change: opacity, transform;
+    }
+
+    .text-block.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .text-block h1 {
+      font-size: clamp(2rem, 5vw, 4.5rem);
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1.05;
+      color: #fff;
+      text-shadow: 0 2px 40px rgba(0,0,0,0.6);
+      max-width: 14ch;
+    }
+
+    .text-block p {
+      margin-top: 1.2rem;
+      font-size: clamp(0.9rem, 1.5vw, 1.2rem);
+      font-weight: 400;
+      color: rgba(255,255,255,0.72);
+      max-width: 42ch;
+      line-height: 1.65;
+      text-shadow: 0 1px 20px rgba(0,0,0,0.5);
+    }
+
+    /* Subtle green accent pill */
+    .text-block .pill {
+      display: inline-block;
+      margin-bottom: 1.1rem;
+      padding: 0.3em 0.9em;
+      border-radius: 999px;
+      background: rgba(34,197,94,0.18);
+      border: 1px solid rgba(34,197,94,0.4);
+      color: #4ade80;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    /* ── CTA button (only on last phase) ── */
+    .text-block .cta {
+      pointer-events: all;
+      margin-top: 2rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.85em 2em;
+      border-radius: 999px;
+      background: #22c55e;
+      color: #000;
+      font-size: 0.95rem;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      text-decoration: none;
+      transition: background 0.2s, transform 0.2s;
+      box-shadow: 0 0 30px rgba(34,197,94,0.35);
+    }
+    .text-block .cta:hover {
+      background: #4ade80;
+      transform: scale(1.04);
+    }
+    .text-block .cta svg {
+      width: 1em; height: 1em;
+    }
+
+    /* ── Progress bar ── */
+    #progress {
+      position: fixed;
+      bottom: 2.5rem;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+      z-index: 10;
+      pointer-events: none;
+    }
+    #progress-track {
+      width: 120px;
+      height: 2px;
+      background: rgba(255,255,255,0.15);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    #progress-fill {
+      height: 100%;
+      width: 0%;
+      background: #22c55e;
+      border-radius: 2px;
+      transition: width 0.1s linear;
+    }
+    #progress-label {
+      font-size: 0.65rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.35);
+    }
+
+    /* ── Scroll hint arrow ── */
+    #scroll-hint {
+      position: absolute;
+      bottom: 2.5rem;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.4rem;
+      opacity: 1;
+      transition: opacity 0.4s;
+      pointer-events: none;
+    }
+    #scroll-hint span {
+      font-size: 0.65rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.4);
+    }
+    #scroll-hint .arrow {
+      width: 20px;
+      height: 20px;
+      border-right: 2px solid rgba(255,255,255,0.3);
+      border-bottom: 2px solid rgba(255,255,255,0.3);
+      transform: rotate(45deg);
+      animation: bounce 1.6s ease-in-out infinite;
+    }
+    @keyframes bounce {
+      0%, 100% { transform: rotate(45deg) translateY(0); }
+      50%       { transform: rotate(45deg) translateY(5px); }
+    }
+  </style>
+</head>
+<body>
+
+<div id="scroll-container">
+  <div id="sticky-wrapper">
+
+    <!-- Canvas renders the frame sequence -->
+    <canvas id="canvas"></canvas>
+
+    <!-- Overlay text blocks (one per story phase) -->
+    <div id="overlay">
+
+      <!-- Phase 1: frames 1–30 -->
+      <div class="text-block" id="phase-1">
+        <span class="pill">AI-Powered</span>
+        <h1>See the market clearly.</h1>
+        <p>VantagePoint turns raw property data into actionable intelligence — pricing, cash flow, and market trends in one place.</p>
+      </div>
+
+      <!-- Phase 2: frames 31–70 -->
+      <div class="text-block" id="phase-2">
+        <span class="pill">Predictive Analytics</span>
+        <h1>Know the value before you buy.</h1>
+        <p>Our AI models train on your own dataset and surface the hidden signals that drive real estate prices.</p>
+      </div>
+
+      <!-- Phase 3: frames 71–101 -->
+      <div class="text-block" id="phase-3">
+        <span class="pill">Ready to invest?</span>
+        <h1>Your edge starts here.</h1>
+        <p>Upload a dataset, train a model, and start making smarter real estate decisions in minutes.</p>
+        <a class="cta" href="/login">
+          Get started
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 8h10M9 4l4 4-4 4"/>
+          </svg>
+        </a>
+      </div>
+
+    </div><!-- /overlay -->
+
+    <!-- Scroll hint (fades once user starts scrolling) -->
+    <div id="scroll-hint">
+      <span>Scroll</span>
+      <div class="arrow"></div>
+    </div>
+
+  </div><!-- /sticky-wrapper -->
+</div><!-- /scroll-container -->
+
+<!-- Progress bar (outside sticky so it's always fixed) -->
+<div id="progress">
+  <div id="progress-track"><div id="progress-fill"></div></div>
+  <span id="progress-label">0 / 101</span>
+</div>
+
+<script>
+  const FRAME_COUNT  = 101;
+  const FOLDER       = 'ezgif-3b8484bab1f24dd6-jpg';
+  const PREFIX       = 'ezgif-frame-';
+  const EXT          = '.jpg';
+
+  // ── Phase thresholds (0-indexed frame numbers) ──
+  const PHASES = [
+    { id: 'phase-1', start:  0, end: 29 },
+    { id: 'phase-2', start: 30, end: 69 },
+    { id: 'phase-3', start: 70, end: 100 },
+  ];
+
+  // ── DOM refs ──
+  const canvas       = document.getElementById('canvas');
+  const ctx          = canvas.getContext('2d');
+  const scrollHint   = document.getElementById('scroll-hint');
+  const progressFill = document.getElementById('progress-fill');
+  const progressLabel= document.getElementById('progress-label');
+  const phaseEls     = PHASES.map(p => ({
+    ...p,
+    el: document.getElementById(p.id),
+  }));
+
+  // ── State ──
+  let currentFrame   = 0;
+  let rafPending     = false;
+  let images         = new Array(FRAME_COUNT);
+  let loadedCount    = 0;
+
+  // ── Helpers ──
+  function pad(n) {
+    return String(n).padStart(3, '0');
+  }
+
+  function framePath(i) {
+    // frames are 1-indexed on disk
+    return `${FOLDER}/${PREFIX}${pad(i + 1)}${EXT}`;
+  }
+
+  // ── Preload all frames ──
+  function preloadImages() {
+    for (let i = 0; i < FRAME_COUNT; i++) {
+      const img  = new Image();
+      img.src    = framePath(i);
+      img.onload = () => { loadedCount++; };
+      images[i]  = img;
+    }
+  }
+
+  // ── Resize canvas to match device pixels ──
+  function resizeCanvas() {
+    canvas.width  = window.innerWidth  * window.devicePixelRatio;
+    canvas.height = window.innerHeight * window.devicePixelRatio;
+    canvas.style.width  = window.innerWidth  + 'px';
+    canvas.style.height = window.innerHeight + 'px';
+    drawFrame(currentFrame);
+  }
+
+  // ── Draw one frame with object-fit: cover math ──
+  function drawFrame(index) {
+    const img = images[index];
+    if (!img || !img.complete || img.naturalWidth === 0) return;
+
+    const cw = canvas.width;
+    const ch = canvas.height;
+    const iw = img.naturalWidth;
+    const ih = img.naturalHeight;
+
+    // Scale to cover the canvas while maintaining aspect ratio
+    const scale = Math.max(cw / iw, ch / ih);
+    const sw    = iw * scale;
+    const sh    = ih * scale;
+    const sx    = (cw - sw) / 2;
+    const sy    = (ch - sh) / 2;
+
+    ctx.clearRect(0, 0, cw, ch);
+    ctx.drawImage(img, sx, sy, sw, sh);
+  }
+
+  // ── Update overlay text phases ──
+  function updatePhases(frameIndex) {
+    phaseEls.forEach(({ el, start, end }) => {
+      const active = frameIndex >= start && frameIndex <= end;
+      el.classList.toggle('visible', active);
+    });
+  }
+
+  // ── Main render tick (called via rAF) ──
+  function render() {
+    rafPending = false;
+
+    // Map scroll progress → frame index
+    const scrollTop    = window.scrollY;
+    const scrollHeight = document.documentElement.scrollHeight - window.innerHeight;
+    const progress     = Math.min(Math.max(scrollTop / scrollHeight, 0), 1);
+    const frameIndex   = Math.min(Math.round(progress * (FRAME_COUNT - 1)), FRAME_COUNT - 1);
+
+    if (frameIndex !== currentFrame) {
+      currentFrame = frameIndex;
+      drawFrame(currentFrame);
+    }
+
+    // Update UI
+    updatePhases(currentFrame);
+    progressFill.style.width  = (progress * 100).toFixed(1) + '%';
+    progressLabel.textContent = `${currentFrame + 1} / ${FRAME_COUNT}`;
+
+    // Fade scroll hint after first scroll
+    if (scrollTop > 40) scrollHint.style.opacity = '0';
+    else                 scrollHint.style.opacity = '1';
+  }
+
+  // ── Throttle scroll via rAF ──
+  function onScroll() {
+    if (!rafPending) {
+      rafPending = true;
+      requestAnimationFrame(render);
+    }
+  }
+
+  // ── Boot ──
+  preloadImages();
+  resizeCanvas();
+  drawFrame(0);
+  updatePhases(0);
+  phaseEls[0].el.classList.add('visible'); // show first phase immediately
+
+  window.addEventListener('scroll',  onScroll, { passive: true });
+  window.addEventListener('resize',  resizeCanvas);
+</script>
+</body>
+</html>

@@ -2,78 +2,51 @@
 
 import { useEffect, useState } from "react";
 
-const LOADING_TEXTS = [
-  "Initializing valuation engine...",
-  "Loading market data...",
-  "Calibrating ML models...",
-  "Preparing dashboard...",
-];
-
 interface LoadingTransitionProps {
   onComplete: () => void;
 }
 
 export function LoadingTransition({ onComplete }: LoadingTransitionProps) {
-  const [progress, setProgress] = useState(0);
-  const [currentText, setCurrentText] = useState(0);
+  const [phase, setPhase] = useState<"in" | "hold" | "out">("in");
 
   useEffect(() => {
-    const progressInterval = setInterval(() => {
-      setProgress(prev => {
-        if (prev >= 100) {
-          clearInterval(progressInterval);
-          setTimeout(onComplete, 400);
-          return 100;
-        }
-        return prev + 2;
-      });
-    }, 40);
+    // Fade in → brief hold → fade out → call onComplete
+    const t1 = setTimeout(() => setPhase("hold"), 50);   // trigger fade-in immediately
+    const t2 = setTimeout(() => setPhase("out"),  600);  // start fade-out after 600ms
+    const t3 = setTimeout(() => onComplete(),     1050); // hand off after fade-out finishes
 
-    const textInterval = setInterval(() => {
-      setCurrentText(prev => (prev + 1) % LOADING_TEXTS.length);
-    }, 600);
-
-    return () => {
-      clearInterval(progressInterval);
-      clearInterval(textInterval);
-    };
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
   }, [onComplete]);
 
   return (
-    <div className="fixed inset-0 bg-foreground z-50 flex flex-col items-center justify-center">
-      {/* Logo */}
-      <div className="mb-12 flex items-center gap-3">
-        <img src="/logo-vantagepoint.png" alt="VantagePoint" className="h-16 w-auto object-contain brightness-0 invert" />
-      </div>
-
-      {/* Progress Bar */}
-      <div className="w-64 h-1 bg-background/20 rounded-full overflow-hidden mb-6">
-        <div 
-          className="h-full bg-background rounded-full transition-all duration-100 ease-out"
-          style={{ width: `${progress}%` }}
-        />
-      </div>
-
-      {/* Loading Text */}
-      <p className="text-background/60 text-sm h-5">
-        {LOADING_TEXTS[currentText]}
-      </p>
-
-      {/* Stats appearing */}
-      <div className="absolute bottom-20 flex gap-16 text-background/40 text-xs tracking-widest">
-        <div className={`transition-opacity duration-500 ${progress > 30 ? 'opacity-100' : 'opacity-0'}`}>
-          <div className="text-background text-2xl font-light mb-1">10M+</div>
-          <div>TRANSACTIONS</div>
-        </div>
-        <div className={`transition-opacity duration-500 ${progress > 50 ? 'opacity-100' : 'opacity-0'}`}>
-          <div className="text-background text-2xl font-light mb-1">$50B</div>
-          <div>ASSETS VALUED</div>
-        </div>
-        <div className={`transition-opacity duration-500 ${progress > 70 ? 'opacity-100' : 'opacity-0'}`}>
-          <div className="text-background text-2xl font-light mb-1">98.2%</div>
-          <div>ACCURACY</div>
-        </div>
-      </div>
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 50,
+        background: "hsl(var(--foreground))",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        opacity: phase === "out" ? 0 : 1,
+        transition: phase === "in"
+          ? "opacity 0.25s ease-out"
+          : "opacity 0.45s cubic-bezier(0.4, 0, 0.2, 1)",
+        pointerEvents: "none",
+      }}
+    >
+      <img
+        src="/logo-vantagepoint.png"
+        alt="VantagePoint"
+        style={{
+          height: "3rem",
+          width: "auto",
+          filter: "brightness(0) invert(1)",
+          opacity: phase === "out" ? 0 : 1,
+          transform: phase === "out" ? "scale(0.96)" : "scale(1)",
+          transition: "opacity 0.45s cubic-bezier(0.4,0,0.2,1), transform 0.45s cubic-bezier(0.4,0,0.2,1)",
+        }}
+      />
     </div>
   );
 }
