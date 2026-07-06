@@ -178,11 +178,12 @@ def build_price_discovery(base_price, projection, feature_importance, correlatio
     delta = end - base or base * 0.03
     correlations = correlations or {}
 
-    top          = feature_importance[:3] if feature_importance else []
-    total_weight = sum(abs(float(f.get("importance", 0.0))) for f in top) or 1.0
+    feats        = feature_importance or []
+    total_weight = sum(abs(float(f.get("importance", 0.0))) for f in feats) or 1.0
 
-    rows = [{"name": "Base Price", "change": base}]
-    for item in top:
+    rows = [{"name": "Base Price", "change": base, "kind": "baseline"}]
+    impacts = []
+    for item in feats:
         name   = str(item.get("feature", "Market Factor"))
         weight = abs(float(item.get("importance", 0.0))) / total_weight
         corr   = float(correlations.get(name, 0.0))
@@ -190,10 +191,11 @@ def build_price_discovery(base_price, projection, feature_importance, correlatio
             sign = 1.0 if corr >= 0 else -1.0
         else:
             sign = -1.0 if any(t in name.lower() for t in ["interest", "rate", "age", "tax", "distance"]) else 1.0
-        rows.append({"name": name, "change": float(delta * weight * sign)})
+        impacts.append({"name": name, "change": float(delta * weight * sign), "kind": "impact"})
 
-    accounted = sum(r["change"] for r in rows)
-    rows.append({"name": "Market Momentum", "change": float(end - accounted)})
+    impacts.sort(key=lambda r: abs(r["change"]), reverse=True)
+    rows.extend(impacts)
+    rows.append({"name": "Final Price", "change": float(end), "kind": "final"})
     return rows
 
 
@@ -223,12 +225,16 @@ def explain_property(model, X_train: pd.DataFrame, selected_row: pd.DataFrame, e
             return waterfall
 
         explainer = shap.Explainer(model, background)
-        base_raw  = np.asarray(explainer.expected_value).reshape(-1)
-        if len(base_raw) and np.isfinite(base_raw[0]):
-            base = float(base_raw[0])
-            waterfall[0]["change"] = base
+        shap_vals = np.asarray(explainer(row).values[0], dtype=float).reshape(-1)
+        shap_vals = np.where(np.isfinite(shap_vals), shap_vals, 0.0)
 
-        shap_vals      = np.asarray(explainer(row).values[0], dtype=float).reshape(-1)
+        # CatBoost/LightGBM SHAP values live in the model's raw-score space,
+        # whose constant offset (e.g. CatBoost's bias = mean target) is NOT part
+        # of explainer.expected_value. Deriving the baseline from the prediction
+        # itself recovers the true expected prediction and guarantees the
+        # waterfall reconciles exactly: baseline + sum(contributions) == predicted.
+        base = float(predicted - shap_vals.sum())
+        waterfall[0]["change"] = base
         contributions  = [
             {"name": feat, "change": float(val), "kind": "impact"}
             for feat, val in zip(row.columns, shap_vals)
@@ -236,11 +242,6 @@ def explain_property(model, X_train: pd.DataFrame, selected_row: pd.DataFrame, e
         ]
         contributions.sort(key=lambda x: abs(x["change"]), reverse=True)
         waterfall.extend(contributions)
-
-        recomposed = base + sum(c["change"] for c in contributions)
-        residual   = predicted - recomposed
-        if abs(residual) > max(1.0, abs(predicted) * 0.001):
-            waterfall.append({"name": "Other Factors", "change": float(residual), "kind": "impact"})
 
         waterfall.append({"name": "Predicted Price", "change": predicted, "kind": "final"})
     except Exception:
