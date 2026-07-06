@@ -378,11 +378,17 @@ def train_logic(df: pd.DataFrame, target_col: str, horizon: int = 30, job_id: st
     sqft_dominant = any("sq_ft_total" in canonical_name(n) for n in top5)
     zip_dominant  = any("zip_code"    in canonical_name(n) for n in top5)
 
+    # Composite confidence = geometric mean of two measured accuracy dimensions:
+    #   - R² — fraction of price variance the model explains (0-1)
+    #   - residual quality — 1 minus MAE relative to the mean absolute price (0-1)
+    # The geometric mean combines them without arbitrary weights and stays low
+    # unless BOTH dimensions are high. Capped at 99: never claim certainty.
     residual_baseline    = float(np.mean(np.abs(y_test))) + 1e-9 if len(y_test) else 1.0
     residual_quality     = 1.0 - min(1.0, float(best_mae) / residual_baseline)
-    composite_confidence = int(round(max(10.0, min(99.0,
-        ((max(0.0, float(best_score)) * 0.72) + (residual_quality * 0.28)) * 100.0
-    ))))
+    r2_clamped           = max(0.0, min(1.0, float(best_score)))
+    composite_confidence = int(round(min(99.0,
+        float(np.sqrt(r2_clamped * residual_quality)) * 100.0
+    )))
 
     if job_id is not None:
         save_model_state(job_id, {"model": best_model, "scaler": scaler, "features": processed})

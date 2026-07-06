@@ -4,26 +4,11 @@ import { useEffect, useMemo, useState } from "react"
 import { TrendingUp, Activity, Info, Zap, Target, BarChart3 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import type { TrainingResult } from "@/src/types"
-import { getMarketIntelligence } from "@/src/api"
+import { getMarketIntelligence, type MarketSignal } from "@/src/api"
 import { InfoTip } from "@/components/ui/info-tip"
-
-type RenovationPackage = "basic" | "midrange" | "luxury" | "structural"
 
 interface MarketDynamicsTabProps {
   result: TrainingResult
-  onSliderChange?: (payload: {
-    sliderValue: number
-    renovationPackage: RenovationPackage
-    forecastHorizonMonths: number
-    baseValuation: number
-    marketCycle: string
-  }) => Promise<{
-    adjustedValuation: number
-    conditionImpact: string
-    renovationCost?: number
-    expectedValueGain?: number
-    projectedProfit?: number
-  }>
 }
 
 interface MarketData {
@@ -41,28 +26,7 @@ interface MarketData {
   }
 }
 
-interface AiSignal {
-  name: string
-  lag_days: number
-  correlation: number
-  description: string
-}
-
 const ROI_ICONS = [Zap, Target, TrendingUp, Activity] as const
-
-const RENOVATION_PACKAGES: Record<RenovationPackage, {
-  label: string
-  cost: number
-  gainPct: number
-}> = {
-  basic: { label: "Basic Refresh", cost: 18000, gainPct: 0.05 },
-  midrange: { label: "Mid-Range Modernization", cost: 42000, gainPct: 0.09 },
-  luxury: { label: "Luxury Upgrade", cost: 95000, gainPct: 0.11 },
-  structural: { label: "Structural Rehab", cost: 140000, gainPct: 0.07 },
-}
-
-const fmtCurrency = (n: number) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n)
 
 function useMarketDynamics(result: TrainingResult): MarketData {
   return useMemo(() => {
@@ -96,18 +60,9 @@ function useMarketDynamics(result: TrainingResult): MarketData {
   }, [result])
 }
 
-export function MarketDynamicsTab({ result, onSliderChange }: MarketDynamicsTabProps) {
+export function MarketDynamicsTab({ result }: MarketDynamicsTabProps) {
   const market = useMarketDynamics(result)
-  const [sliderValue, setSliderValue] = useState(50)
-  const [renovationPackage, setRenovationPackage] = useState<RenovationPackage>("basic")
-  const [forecastHorizonMonths, setForecastHorizonMonths] = useState(12)
-  const [adjustedValuation, setAdjustedValuation] = useState(market.baseValuation)
-  const [conditionImpact, setConditionImpact] = useState("Move the slider to simulate market conditions.")
-  const [renovationCost, setRenovationCost] = useState(RENOVATION_PACKAGES.basic.cost)
-  const [expectedValueGain, setExpectedValueGain] = useState(market.baseValuation * RENOVATION_PACKAGES.basic.gainPct)
-  const [projectedProfit, setProjectedProfit] = useState((market.baseValuation * RENOVATION_PACKAGES.basic.gainPct) - RENOVATION_PACKAGES.basic.cost)
-  const [isSimulating, setIsSimulating] = useState(false)
-  const [aiSignals, setAiSignals] = useState<AiSignal[]>([])
+  const [aiSignals, setAiSignals] = useState<MarketSignal[]>([])
   const [signalsLoading, setSignalsLoading] = useState(false)
 
   useEffect(() => {
@@ -143,54 +98,10 @@ export function MarketDynamicsTab({ result, onSliderChange }: MarketDynamicsTabP
       mape: Number(result.mape ?? 0),
       r2: Number(result.r2_score ?? 0),
     })
-      .then((data: { signals?: AiSignal[] }) => { if (data?.signals) setAiSignals(data.signals) })
+      .then((data) => { if (data?.signals) setAiSignals(data.signals) })
       .catch(() => {})
       .finally(() => setSignalsLoading(false))
   }, [result])
-
-  useEffect(() => {
-    setAdjustedValuation(market.baseValuation)
-    const selected = RENOVATION_PACKAGES[renovationPackage]
-    const expectedGain = market.baseValuation * selected.gainPct
-    setRenovationCost(selected.cost)
-    setExpectedValueGain(expectedGain)
-    setProjectedProfit(expectedGain - selected.cost)
-  }, [market.baseValuation, renovationPackage])
-
-  useEffect(() => {
-    const timer = window.setTimeout(async () => {
-      if (!onSliderChange) {
-        setAdjustedValuation(market.baseValuation)
-        setConditionImpact("Connect onSliderChange service for live valuation simulation.")
-        return
-      }
-
-      try {
-        setIsSimulating(true)
-        const response = await onSliderChange({
-          sliderValue,
-          renovationPackage,
-          forecastHorizonMonths,
-          baseValuation: market.baseValuation,
-          marketCycle: result.market_dynamics?.temporal_analysis?.market_cycle ?? "Balanced",
-        })
-        setAdjustedValuation(Number(response.adjustedValuation ?? market.baseValuation))
-        setConditionImpact(response.conditionImpact || "Scenario updated from backend service.")
-        if (typeof response.renovationCost === "number") setRenovationCost(response.renovationCost)
-        if (typeof response.expectedValueGain === "number") setExpectedValueGain(response.expectedValueGain)
-        if (typeof response.projectedProfit === "number") setProjectedProfit(response.projectedProfit)
-      } catch {
-        setAdjustedValuation(market.baseValuation)
-        setConditionImpact("Scenario service unavailable. Showing base valuation.")
-      } finally {
-        setIsSimulating(false)
-      }
-    }, 350)
-
-    return () => window.clearTimeout(timer)
-  }, [sliderValue, renovationPackage, forecastHorizonMonths, onSliderChange, market.baseValuation, result.market_dynamics?.temporal_analysis?.market_cycle])
-
-  const sliderPosition = sliderValue < 34 ? "Conservative" : sliderValue < 67 ? "Balanced" : "Aggressive"
 
   return (
     <div className="space-y-6">
@@ -311,81 +222,6 @@ export function MarketDynamicsTab({ result, onSliderChange }: MarketDynamicsTabP
             }) : (
               <p className="text-sm text-muted-foreground py-4 text-center">No signal data available.</p>
             )}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* ── Scenario Simulator ───────────────────────────────────────────────── */}
-      <Card className="border-0 shadow-sm">
-        <CardHeader className="pb-4">
-          <CardTitle className="text-lg font-semibold flex items-center gap-1">
-            Scenario Simulator
-            <InfoTip text="Adjust renovation spend and market conditions to model how they affect expected property value." />
-          </CardTitle>
-          <p className="text-sm text-muted-foreground">Model different renovation and market scenarios</p>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">Renovation Package</label>
-              <select
-                value={renovationPackage}
-                onChange={(e) => setRenovationPackage(e.target.value as RenovationPackage)}
-                className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-foreground"
-              >
-                <option value="basic">Basic Refresh</option>
-                <option value="midrange">Mid-Range Modernization</option>
-                <option value="luxury">Luxury Upgrade</option>
-                <option value="structural">Structural Rehab</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">Forecast Horizon</label>
-              <select
-                value={forecastHorizonMonths}
-                onChange={(e) => setForecastHorizonMonths(Number(e.target.value))}
-                className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-foreground"
-              >
-                <option value={6}>6 months</option>
-                <option value={12}>1 year</option>
-                <option value={60}>5 years</option>
-                <option value={120}>10 years</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-4">
-            <div className="rounded-xl bg-muted/40 p-5">
-              <div className="flex items-center justify-between text-xs text-muted-foreground mb-2">
-                <span>Conservative</span><span>Balanced</span><span>Aggressive</span>
-              </div>
-              <input type="range" min={0} max={100} value={sliderValue}
-                onChange={(e) => setSliderValue(Number(e.target.value))}
-                className="w-full accent-foreground" />
-              <div className="mt-3 text-sm text-muted-foreground">
-                Position: <span className="font-semibold text-foreground">{sliderPosition}</span>
-                {isSimulating && <span className="ml-2 text-xs">Updating…</span>}
-              </div>
-            </div>
-
-            <div className="rounded-xl bg-foreground text-background p-5 flex flex-col justify-center">
-              <p className="text-xs text-background/60 uppercase tracking-wide mb-1">Adjusted Valuation</p>
-              <p className="text-3xl font-bold tabular-nums">{fmtCurrency(adjustedValuation)}</p>
-              <p className="text-xs text-background/60 mt-2 leading-relaxed">{conditionImpact}</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-3 gap-3">
-            {[
-              { label: "Renovation Cost",     value: fmtCurrency(renovationCost) },
-              { label: "Expected Value Gain", value: fmtCurrency(expectedValueGain) },
-              { label: "Projected Profit",    value: (projectedProfit >= 0 ? "+" : "") + fmtCurrency(projectedProfit), positive: projectedProfit >= 0 },
-            ].map(({ label, value, positive }) => (
-              <div key={label} className="rounded-xl bg-muted/40 px-4 py-3">
-                <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">{label}</p>
-                <p className={`text-sm font-semibold ${positive === true ? "text-emerald-600" : positive === false ? "text-red-500" : "text-foreground"}`}>{value}</p>
-              </div>
-            ))}
           </div>
         </CardContent>
       </Card>

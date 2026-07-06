@@ -9,15 +9,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { InfoTip } from "@/components/ui/info-tip"
 import type { TrainingResult } from "@/src/types"
 import { calcMortgage, getDefaultPrice } from "@/src/finance"
+import { fmt, fmtPct } from "@/lib/format"
 
 interface InvestmentCalculatorTabProps {
   result: TrainingResult
 }
-
-const fmt = (n: number) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n)
-
-const fmtPct = (n: number, decimals = 2) => `${n.toFixed(decimals)}%`
 
 type DealRating = { label: string; color: string; bg: string; icon: typeof CheckCircle2 }
 

@@ -4,6 +4,8 @@ import {
   Document, Page, Text, View, StyleSheet, pdf, Font,
 } from "@react-pdf/renderer"
 import type { TrainingResult } from "@/src/types"
+import { fmt, fmtK, fmtPct } from "@/lib/format"
+import { calcMortgage, calcRemainingBalance } from "@/src/finance"
 
 // â”€â”€â”€ Styles â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const C = {
@@ -58,24 +60,6 @@ const s = StyleSheet.create({
 })
 
 // â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-const fmt = (n: number) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n)
-
-const fmtPct = (n: number, d = 1) => `${n.toFixed(d)}%`
-const fmtK   = (n: number) => Math.abs(n) >= 1e6 ? `$${(n/1e6).toFixed(1)}M` : Math.abs(n) >= 1e3 ? `$${(n/1e3).toFixed(0)}K` : `$${Math.round(n)}`
-
-function calcMortgage(principal: number, rate: number, years: number) {
-  if (rate === 0) return principal / (years * 12)
-  const r = rate / 100 / 12, n = years * 12
-  return (principal * r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1)
-}
-
-function calcRemainingBalance(principal: number, rate: number, years: number, paid: number) {
-  if (paid >= years) return 0
-  if (rate === 0) return principal * (1 - paid / years)
-  const r = rate / 100 / 12, n = years * 12, p = paid * 12
-  return principal * (Math.pow(1 + r, n) - Math.pow(1 + r, p)) / (Math.pow(1 + r, n) - 1)
-}
 
 // â”€â”€â”€ Sub-components â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function SectionTitle({ children }: { children: string }) {
@@ -165,7 +149,7 @@ function ReportDocument({ result, aiAdvice, generatedAt }: {
         <View style={s.kpiRow}>
           <KpiBox label="Winner Model"   value={result.winner}                    sub={`${result.train_size} train / ${result.test_size} test rows`} />
           <KpiBox label="RÂ² Score"       value={result.r2_score.toFixed(3)}       sub="Variance explained" color={result.r2_score >= 0.8 ? C.green : C.amber} />
-          <KpiBox label="MAPE"           value={fmtPct(result.mape)}              sub="Mean abs % error"   color={result.mape <= 10 ? C.green : result.mape <= 20 ? C.amber : C.red} />
+          <KpiBox label="MAPE"           value={fmtPct(result.mape, 1)}              sub="Mean abs % error"   color={result.mape <= 10 ? C.green : result.mape <= 20 ? C.amber : C.red} />
           <KpiBox label="Confidence"     value={confidence}                       sub={`${Math.round(result.composite_confidence_score ?? 0)}% composite`} color={confColor} />
         </View>
         <View style={s.kpiRow}>
@@ -187,7 +171,7 @@ function ReportDocument({ result, aiAdvice, generatedAt }: {
             <View key={i} style={i % 2 === 0 ? s.tr : s.trAlt}>
               <Text style={[s.tdBold, { flex: 2 }]}>{row.name}{row.name === result.winner ? " â˜…" : ""}</Text>
               <Text style={[s.td, { flex: 1 }]}>{row.r2.toFixed(3)}</Text>
-              <Text style={[s.td, { flex: 1 }]}>{fmtPct(row.mape)}</Text>
+              <Text style={[s.td, { flex: 1 }]}>{fmtPct(row.mape, 1)}</Text>
               <Text style={[s.td, { flex: 1 }]}>{fmtK(row.mae)}</Text>
               <Text style={[s.td, { flex: 1 }]}>{fmtK(row.rmse)}</Text>
             </View>
@@ -198,7 +182,7 @@ function ReportDocument({ result, aiAdvice, generatedAt }: {
         <SectionTitle>Market Overview</SectionTitle>
         <View style={s.kpiRow}>
           <KpiBox label="Market Cycle"       value={cycle.split(" - ")[0]}       sub={cycle.split(" - ")[1] ?? ""} />
-          <KpiBox label="YoY Appreciation"   value={fmtPct(yoy)}                 sub="Latest annual rate" color={yoy > 3 ? C.green : yoy > 0 ? C.amber : C.red} />
+          <KpiBox label="YoY Appreciation"   value={fmtPct(yoy, 1)}                 sub="Latest annual rate" color={yoy > 3 ? C.green : yoy > 0 ? C.amber : C.red} />
           <KpiBox label="Liquidity Score"    value={`${liq}/99`}                 sub={days ? `~${days} days to sell` : "Score out of 99"} />
           <KpiBox label="Avg Market Price"   value={avgPrice > 0 ? fmtK(avgPrice) : "N/A"} sub="Dataset average" />
         </View>
@@ -227,7 +211,7 @@ function ReportDocument({ result, aiAdvice, generatedAt }: {
                 <Text style={[s.td,     { flex: 1 }]}>#{sig.property_idx + 1}</Text>
                 <Text style={[s.td,     { flex: 1 }]}>{fmtK(sig.list_price)}</Text>
                 <Text style={[s.tdBold, { flex: 1, color: C.green }]}>{fmtK(sig.ai_value)}</Text>
-                <Text style={[s.tdBold, { flex: 0.8, color: C.green }]}>+{fmtPct(sig.delta_pct)}</Text>
+                <Text style={[s.tdBold, { flex: 0.8, color: C.green }]}>+{fmtPct(sig.delta_pct, 1)}</Text>
                 <Text style={[s.td,     { flex: 1 }]}>{sig.potential_gain ? fmtK(sig.potential_gain) : "â€”"}</Text>
               </View>
             ))}
@@ -250,7 +234,7 @@ function ReportDocument({ result, aiAdvice, generatedAt }: {
                 <Text style={[s.td,     { flex: 1 }]}>#{sig.property_idx + 1}</Text>
                 <Text style={[s.td,     { flex: 1 }]}>{fmtK(sig.list_price)}</Text>
                 <Text style={[s.tdBold, { flex: 1, color: C.red }]}>{fmtK(sig.ai_value)}</Text>
-                <Text style={[s.tdBold, { flex: 0.8, color: C.red }]}>{fmtPct(sig.delta_pct)}</Text>
+                <Text style={[s.tdBold, { flex: 0.8, color: C.red }]}>{fmtPct(sig.delta_pct, 1)}</Text>
                 <Text style={[s.td,     { flex: 1 }]}>{sig.potential_loss ? fmtK(sig.potential_loss) : "â€”"}</Text>
               </View>
             ))}
@@ -291,8 +275,8 @@ function ReportDocument({ result, aiAdvice, generatedAt }: {
           Calculated on avg price {fmt(price)} Â· 20% down Â· 7% rate Â· 30yr Â· rent {fmt(rent)}/mo Â· 5% vacancy
         </Text>
         <View style={s.kpiRow}>
-          <KpiBox label="Cap Rate"         value={fmtPct(capRate)}      color={capRate >= 8 ? C.green : capRate >= 5 ? C.amber : C.red}  sub="NOI / Property Price" />
-          <KpiBox label="Cash-on-Cash"     value={fmtPct(coc)}          color={coc >= 10 ? C.green : coc >= 6 ? C.amber : C.red}         sub="Annual CF / Down Payment" />
+          <KpiBox label="Cap Rate"         value={fmtPct(capRate, 1)}      color={capRate >= 8 ? C.green : capRate >= 5 ? C.amber : C.red}  sub="NOI / Property Price" />
+          <KpiBox label="Cash-on-Cash"     value={fmtPct(coc, 1)}          color={coc >= 10 ? C.green : coc >= 6 ? C.amber : C.red}         sub="Annual CF / Down Payment" />
           <KpiBox label="DSCR"             value={`${dscr.toFixed(2)}x`} color={dscr >= 1.25 ? C.green : dscr >= 1 ? C.amber : C.red}   sub="NOI / Debt Service" />
           <KpiBox label="GRM"              value={`${grm.toFixed(1)}x`}                                                                   sub="Price / Annual Rent" />
         </View>
@@ -306,7 +290,7 @@ function ReportDocument({ result, aiAdvice, generatedAt }: {
         {/* 10-Year Cash Flow Table */}
         <SectionTitle>10-Year Cash Flow Projection</SectionTitle>
         <Text style={[s.kpiSub, { marginBottom: 8 }]}>
-          Appreciation: {fmtPct(appRate)} (dataset YoY avg) Â· Rent growth 2.5%/yr Â· Expense growth 3%/yr
+          Appreciation: {fmtPct(appRate, 1)} (dataset YoY avg) Â· Rent growth 2.5%/yr Â· Expense growth 3%/yr
         </Text>
         <View style={s.table}>
           <View style={s.thead}>
@@ -358,7 +342,7 @@ function ReportDocument({ result, aiAdvice, generatedAt }: {
                   <Text style={[s.tdBold, { flex: 1 }]}>{row.year}</Text>
                   <Text style={[s.td,     { flex: 1 }]}>{fmtK(row.price_avg)}</Text>
                   <Text style={[s.td,     { flex: 1, color: row.yoy_appreciation > 3 ? C.green : row.yoy_appreciation > 0 ? C.amber : C.red }]}>
-                    {row.yoy_appreciation > 0 ? "+" : ""}{fmtPct(row.yoy_appreciation)}
+                    {row.yoy_appreciation > 0 ? "+" : ""}{fmtPct(row.yoy_appreciation, 1)}
                   </Text>
                   <Text style={[s.td,     { flex: 1 }]}>{row.sample_count}</Text>
                 </View>

@@ -1,11 +1,13 @@
 "use client"
 
 import { useState, useCallback, useEffect } from "react"
+import { motion } from "framer-motion"
 import { Hero } from "@/components/landing/hero"
 import { LoadingTransition } from "@/components/landing/loading-transition"
 import { LoginModal } from "@/components/landing/login-modal"
 import { Sidebar } from "@/components/dashboard/sidebar"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsContent } from "@/components/ui/tabs"
+import { AnimatedTabsList } from "@/components/dashboard/animated-tabs"
 import { ModelStatsTab } from "@/components/dashboard/tabs/model-stats"
 import { ValuationEngineTab } from "@/components/dashboard/tabs/valuation-engine"
 import { MarketDynamicsTab } from "@/components/dashboard/tabs/market-dynamics"
@@ -13,7 +15,6 @@ import { MarketInventoryTab } from "@/components/dashboard/tabs/market-inventory
 import { PredictTab } from "@/components/dashboard/tabs/predict-tab"
 import { InvestmentCalculatorTab } from "@/components/dashboard/tabs/investment-calculator"
 import { CashFlowTab } from "@/components/dashboard/tabs/cash-flow"
-import { PriceAnalysisTab } from "@/components/dashboard/tabs/price-analysis"
 import { ColumnMapper } from "@/components/dashboard/column-mapper"
 import { AiAdvicePanel } from "@/components/dashboard/ai-advice-panel"
 import {
@@ -21,7 +22,7 @@ import {
   Moon, Sun, Download, RotateCcw, Home, Calculator, TrendingUp, FileText,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { startTraining, waitForTrainingCompletion, simulateMarketScenario, mapColumns, getAiAdvice, logout, getStoredUser } from "@/src/api"
+import { startTraining, waitForTrainingCompletion, mapColumns, getAiAdvice, logout, getStoredUser } from "@/src/api"
 import { downloadPDF } from "@/components/dashboard/report-pdf"
 import type { TrainingResult, ColumnMappingResult } from "@/src/types"
 import type { ConfirmedMapping } from "@/components/dashboard/column-mapper"
@@ -261,19 +262,6 @@ export default function App() {
     URL.revokeObjectURL(url)
   }, [result, jobId])
 
-  const handleMarketScenarioChange = useCallback(async ({
-    sliderValue, renovationPackage, forecastHorizonMonths, baseValuation, marketCycle,
-  }: {
-    sliderValue: number
-    renovationPackage: "basic" | "midrange" | "luxury" | "structural"
-    forecastHorizonMonths: number
-    baseValuation: number
-    marketCycle: string
-  }) => {
-    if (!result) return { adjustedValuation: 0, conditionImpact: "No training result is available yet." }
-    return simulateMarketScenario({ baseValuation, sliderValue, marketCycle, renovationPackage, forecastHorizonMonths })
-  }, [result])
-
   if (appState === "landing") {
     return (
       <>
@@ -417,71 +405,67 @@ export default function App() {
         {/* Tabs */}
         <div className="flex-1 p-8 overflow-auto">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="mb-6 bg-card border border-border p-1.5 rounded-xl h-auto">
-              <TabsTrigger value="valuation-engine" className="gap-2 px-4 py-2.5 rounded-lg data-[state=active]:bg-foreground data-[state=active]:text-background data-[state=active]:shadow-sm transition-all">
-                <Settings2 className="w-4 h-4" /> Price Discovery
-              </TabsTrigger>
-              <TabsTrigger value="price-analysis" className="gap-2 px-4 py-2.5 rounded-lg data-[state=active]:bg-foreground data-[state=active]:text-background data-[state=active]:shadow-sm transition-all">
-                <BarChart3 className="w-4 h-4" /> Price Analysis
-              </TabsTrigger>
-              <TabsTrigger value="market-dynamics" className="gap-2 px-4 py-2.5 rounded-lg data-[state=active]:bg-foreground data-[state=active]:text-background data-[state=active]:shadow-sm transition-all">
-                <Activity className="w-4 h-4" /> Market Intelligence
-              </TabsTrigger>
-              <TabsTrigger value="market-inventory" className="gap-2 px-4 py-2.5 rounded-lg data-[state=active]:bg-foreground data-[state=active]:text-background data-[state=active]:shadow-sm transition-all">
-                <Building2 className="w-4 h-4" /> Market Inventory
-              </TabsTrigger>
-              <TabsTrigger value="predict" className="gap-2 px-4 py-2.5 rounded-lg data-[state=active]:bg-foreground data-[state=active]:text-background data-[state=active]:shadow-sm transition-all">
-                <Home className="w-4 h-4" /> Predict
-              </TabsTrigger>
-              <TabsTrigger value="investment-calculator" className="gap-2 px-4 py-2.5 rounded-lg data-[state=active]:bg-foreground data-[state=active]:text-background data-[state=active]:shadow-sm transition-all">
-                <Calculator className="w-4 h-4" /> Investment
-              </TabsTrigger>
-              <TabsTrigger value="cash-flow" className="gap-2 px-4 py-2.5 rounded-lg data-[state=active]:bg-foreground data-[state=active]:text-background data-[state=active]:shadow-sm transition-all">
-                <TrendingUp className="w-4 h-4" /> Cash Flow
-              </TabsTrigger>
-              <TabsTrigger value="model-stats" className="gap-2 px-4 py-2.5 rounded-lg data-[state=active]:bg-foreground data-[state=active]:text-background data-[state=active]:shadow-sm transition-all">
-                <BarChart3 className="w-4 h-4" /> Model Report
-              </TabsTrigger>
-            </TabsList>
+            <AnimatedTabsList
+              activeTab={activeTab}
+              items={[
+                { value: "valuation-engine",      label: "Price Discovery",     icon: <Settings2 className="w-4 h-4" /> },
+                { value: "market-dynamics",       label: "Market Intelligence", icon: <Activity className="w-4 h-4" /> },
+                { value: "market-inventory",      label: "Market Inventory",    icon: <Building2 className="w-4 h-4" /> },
+                { value: "predict",                label: "Predict",            icon: <Home className="w-4 h-4" /> },
+                { value: "investment-calculator", label: "Investment",         icon: <Calculator className="w-4 h-4" /> },
+                { value: "cash-flow",             label: "Cash Flow",          icon: <TrendingUp className="w-4 h-4" /> },
+                { value: "model-stats",           label: "Model Report",      icon: <BarChart3 className="w-4 h-4" /> },
+              ]}
+            />
 
-            <TabsContent value="valuation-engine" className="mt-0 animate-in fade-in-0 slide-in-from-bottom-4 duration-300">
-              {result ? <ValuationEngineTab result={result} /> : <LockedState icon={<Settings2 className="w-6 h-6" />} label="Price Discovery" />}
+            <TabsContent value="valuation-engine" className="mt-0">
+              <FadeUp active={activeTab === "valuation-engine"}>
+                {result ? <ValuationEngineTab result={result} /> : <LockedState icon={<Settings2 className="w-6 h-6" />} label="Price Discovery" />}
+              </FadeUp>
             </TabsContent>
 
-            <TabsContent value="price-analysis" className="mt-0 animate-in fade-in-0 slide-in-from-bottom-4 duration-300">
-              {result ? <PriceAnalysisTab result={result} /> : <LockedState icon={<BarChart3 className="w-6 h-6" />} label="Price Analysis" />}
+            <TabsContent value="market-dynamics" className="mt-0">
+              <FadeUp active={activeTab === "market-dynamics"}>
+                {result
+                  ? <MarketDynamicsTab result={result} />
+                  : <LockedState icon={<Activity className="w-6 h-6" />} label="Market Intelligence" />}
+              </FadeUp>
             </TabsContent>
 
-            <TabsContent value="market-dynamics" className="mt-0 animate-in fade-in-0 slide-in-from-bottom-4 duration-300">
-              {result
-                ? <MarketDynamicsTab result={result} onSliderChange={handleMarketScenarioChange} />
-                : <LockedState icon={<Activity className="w-6 h-6" />} label="Market Intelligence" />}
+            <TabsContent value="market-inventory" className="mt-0">
+              <FadeUp active={activeTab === "market-inventory"}>
+                {result ? <MarketInventoryTab result={result} /> : <LockedState icon={<Building2 className="w-6 h-6" />} label="Market Inventory" />}
+              </FadeUp>
             </TabsContent>
 
-            <TabsContent value="market-inventory" className="mt-0 animate-in fade-in-0 slide-in-from-bottom-4 duration-300">
-              {result ? <MarketInventoryTab result={result} /> : <LockedState icon={<Building2 className="w-6 h-6" />} label="Market Inventory" />}
+            <TabsContent value="predict" className="mt-0">
+              <FadeUp active={activeTab === "predict"}>
+                {result && jobId
+                  ? <PredictTab jobId={jobId} result={result} />
+                  : <LockedState icon={<Home className="w-6 h-6" />} label="Single-Property Prediction" />}
+              </FadeUp>
             </TabsContent>
 
-            <TabsContent value="predict" className="mt-0 animate-in fade-in-0 slide-in-from-bottom-4 duration-300">
-              {result && jobId
-                ? <PredictTab jobId={jobId} result={result} />
-                : <LockedState icon={<Home className="w-6 h-6" />} label="Single-Property Prediction" />}
+            <TabsContent value="investment-calculator" className="mt-0">
+              <FadeUp active={activeTab === "investment-calculator"}>
+                {result
+                  ? <InvestmentCalculatorTab result={result} />
+                  : <LockedState icon={<Calculator className="w-6 h-6" />} label="Investment Calculator" />}
+              </FadeUp>
             </TabsContent>
 
-            <TabsContent value="investment-calculator" className="mt-0 animate-in fade-in-0 slide-in-from-bottom-4 duration-300">
-              {result
-                ? <InvestmentCalculatorTab result={result} />
-                : <LockedState icon={<Calculator className="w-6 h-6" />} label="Investment Calculator" />}
+            <TabsContent value="cash-flow" className="mt-0">
+              <FadeUp active={activeTab === "cash-flow"}>
+                {result
+                  ? <CashFlowTab result={result} />
+                  : <LockedState icon={<TrendingUp className="w-6 h-6" />} label="Cash Flow & Returns" />}
+              </FadeUp>
             </TabsContent>
 
-            <TabsContent value="cash-flow" className="mt-0 animate-in fade-in-0 slide-in-from-bottom-4 duration-300">
-              {result
-                ? <CashFlowTab result={result} />
-                : <LockedState icon={<TrendingUp className="w-6 h-6" />} label="Cash Flow & Returns" />}
-            </TabsContent>
-
-            <TabsContent value="model-stats" className="mt-0 animate-in fade-in-0 slide-in-from-bottom-4 duration-300">
-              {result ? <ModelStatsTab result={result} /> : <LockedState icon={<BarChart3 className="w-6 h-6" />} label="Model Report" />}
+            <TabsContent value="model-stats" className="mt-0">
+              <FadeUp active={activeTab === "model-stats"}>
+                {result ? <ModelStatsTab result={result} /> : <LockedState icon={<BarChart3 className="w-6 h-6" />} label="Model Report" />}
+              </FadeUp>
             </TabsContent>
           </Tabs>
         </div>
@@ -502,13 +486,30 @@ export default function App() {
   )
 }
 
+// Radix only mounts the active TabsContent, so each mount is a fresh fade-up.
+function FadeUp({ children }: { active: boolean; children: React.ReactNode }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ type: "spring", damping: 25, stiffness: 200 }}
+    >
+      {children}
+    </motion.div>
+  )
+}
+
 function LockedState({ icon, label }: { icon: React.ReactNode; label: string }) {
   return (
-    <div className="flex flex-col items-center justify-center min-h-[420px] gap-4 text-muted-foreground">
-      <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center">
+    <div className="relative flex flex-col items-center justify-center min-h-[420px] gap-4 text-muted-foreground overflow-hidden">
+      <div
+        className="pointer-events-none absolute w-64 h-64 rounded-full bg-foreground/[0.06] blur-3xl"
+        aria-hidden
+      />
+      <div className="relative w-14 h-14 rounded-2xl bg-muted flex items-center justify-center">
         {icon}
       </div>
-      <div className="text-center">
+      <div className="relative text-center">
         <p className="text-base font-medium text-foreground">{label}</p>
         <p className="text-sm mt-1 max-w-xs">Upload a dataset and initialize the engine to unlock this view.</p>
       </div>

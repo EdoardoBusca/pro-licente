@@ -3,32 +3,19 @@
 import { useMemo, useState } from "react"
 import {
   ResponsiveContainer,
-  RadarChart, PolarGrid, PolarAngleAxis, Radar, Tooltip,
+  BarChart, Bar, XAxis, YAxis, Cell, CartesianGrid, ReferenceLine, Tooltip, LabelList,
 } from "recharts"
 import {
   ArrowUpRight, ArrowDownRight, TrendingUp,
-  ChevronDown, ChevronUp, Activity, Zap, Clock, Target,
-  Lightbulb, BookOpen, CheckCircle2,
+  ChevronDown, ChevronUp, Activity, Target,
+  CheckCircle2, Download,
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import type { TrainingResult, ArbitrageSignal } from "@/src/types"
 import { InfoTip } from "@/components/ui/info-tip"
+import { fmt, fmtK, safeNum } from "@/lib/format"
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-const fmt = (n: number) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n)
-
-const fmtK = (n: number) => {
-  if (Math.abs(n) >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`
-  if (Math.abs(n) >= 1_000)     return `$${(n / 1_000).toFixed(0)}K`
-  return `$${n}`
-}
-
-const safeNum = (v: unknown, fallback = 0): number => {
-  const n = Number(v)
-  return Number.isFinite(n) ? n : fallback
-}
 
 function parseMarketLabel(raw: string) {
   const lower = (raw ?? "").toLowerCase()
@@ -39,46 +26,37 @@ function parseMarketLabel(raw: string) {
   return                                 { label: "Balanced Market",  dot: "#10B981" }
 }
 
-// ─── Strategy text ────────────────────────────────────────────────────────────
+function barColor(kind: string, change: number): string {
+  if (kind === "baseline") return "#94A3B8"
+  if (kind === "final")    return "#0F172A"
+  return change >= 0 ? "#10B981" : "#EF4444"
+}
 
-function buildStrategy(result: TrainingResult): string {
-  const cycle      = result.market_dynamics?.temporal_analysis?.market_cycle ?? "Balanced"
-  const buys       = result.arbitrage?.buy_signals?.length ?? 0
-  const risks      = result.arbitrage?.risk_signals?.length ?? 0
-  const confidence = safeNum(result.composite_confidence_score).toFixed(0)
-  const mape       = safeNum(result.mape).toFixed(1)
-  const winner     = result.winner ?? "the ensemble model"
-  const days       = safeNum(result.market_dynamics?.sales_velocity?.expected_days_to_sell, 0)
-  const r2         = safeNum(result.r2_score).toFixed(3)
+// ─── Tooltip ──────────────────────────────────────────────────────────────────
 
-  const marketSentence =
-    cycle.toLowerCase().includes("hot")
-      ? "The market is running hot — low inventory and strong demand are compressing time-to-close."
-      : cycle.toLowerCase().includes("cold") || cycle.toLowerCase().includes("slow")
-      ? "The market is cooling. Buyers hold negotiating leverage and days-on-market are rising."
-      : "Market conditions are balanced with moderate buyer and seller activity."
+function WaterfallTooltip({ active, payload }: { active?: boolean; payload?: any[] }) {
+  if (!active || !payload?.length) return null
+  const d   = payload[0].payload
+  const val = safeNum(d.value)
+  const color =
+    d.kind === "baseline" ? "#64748B" :
+    d.kind === "final"    ? "#0F172A" :
+    val >= 0              ? "#10B981" : "#EF4444"
 
-  const signalSentence =
-    buys > 0 && risks > 0
-      ? `The AI engine detected <strong>${buys} underpriced opportunit${buys === 1 ? "y" : "ies"}</strong> and flagged <strong>${risks} overpriced risk${risks === 1 ? "" : "s"}</strong> in the dataset.`
-      : buys > 0
-      ? `The AI engine identified <strong>${buys} high-confidence buy signal${buys === 1 ? "" : "s"}</strong> — properties trading below their intrinsic AI valuation.`
-      : risks > 0
-      ? `Caution: the engine flagged <strong>${risks} overpriced propert${risks === 1 ? "y" : "ies"}</strong>. Avoid chasing these listings at current ask prices.`
-      : "The dataset shows no significant mispricing. Properties appear fairly valued relative to AI estimates."
+  const typeLabel =
+    d.kind === "baseline" ? "Market Baseline" :
+    d.kind === "final"    ? "AI Final Price"  :
+    val >= 0              ? "Price Uplift"    : "Price Drag"
 
-  const modelSentence = `The winning algorithm is <strong>${winner}</strong> with an R² of ${r2} and a MAPE of ${mape}% — achieving <strong>${confidence}% AI precision</strong>. ${
-    days > 0 ? `Assets in this dataset are expected to clear in approximately <strong>${days} days</strong>.` : ""
-  }`
-
-  const actionSentence =
-    buys >= 3
-      ? "Recommended action: prioritise due diligence on the flagged buy signals before the window narrows."
-      : risks >= 3
-      ? "Recommended action: re-evaluate any overpriced holdings and consider repositioning at a lower ask."
-      : "Recommended action: continue monitoring market momentum and re-run the engine as new data arrives."
-
-  return [marketSentence, signalSentence, modelSentence, actionSentence].join(" ")
+  return (
+    <div className="rounded-xl px-4 py-3 bg-card border border-border shadow-xl text-sm max-w-[220px]">
+      <p className="font-semibold text-foreground mb-0.5">{d.name}</p>
+      <p className="text-xs text-muted-foreground mb-2">{typeLabel}</p>
+      <p className="text-base font-bold" style={{ color }}>
+        {d.kind === "impact" && val > 0 ? "+" : ""}{fmt(val)}
+      </p>
+    </div>
+  )
 }
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -97,53 +75,69 @@ export function ValuationEngineTab({ result }: ValuationEngineTabProps) {
       name:  d.name,
       value: safeNum(d.change),
       kind:  d.kind,
+      fill:  barColor(d.kind, safeNum(d.change)),
     })),
     [result.market_dynamics?.price_discovery],
   )
 
+  const baselineValue   = safeNum(discoveryData.find((d) => d.kind === "baseline")?.value)
   const aiPredictedValue = safeNum(discoveryData.find((d) => d.kind === "final")?.value ?? 0)
-  const positiveImpact   = discoveryData.filter((d) => d.kind === "impact" && d.value > 0).reduce((s, d) => s + d.value, 0)
-  const negativeImpact   = discoveryData.filter((d) => d.kind === "impact" && d.value < 0).reduce((s, d) => s + d.value, 0)
+  const positiveImpact  = discoveryData.filter((d) => d.kind === "impact" && d.value > 0).reduce((s, d) => s + d.value, 0)
+  const negativeImpact  = discoveryData.filter((d) => d.kind === "impact" && d.value < 0).reduce((s, d) => s + d.value, 0)
+
+  // ── Waterfall connector lines ────────────────────────────────────────────
+  const connectors = useMemo(() => {
+    const rows: { from: string; to: string; y: number }[] = []
+    let running = 0
+    for (let i = 0; i < discoveryData.length; i++) {
+      const d = discoveryData[i]
+      if (d.kind === "baseline") { running = d.value; continue }
+      rows.push({ from: discoveryData[i - 1]?.name ?? d.name, to: d.name, y: running })
+      running = d.kind === "final" ? d.value : running + d.value
+    }
+    return rows
+  }, [discoveryData])
+
+  // ── Confidence range ─────────────────────────────────────────────────────
+  const mape      = safeNum(result.mape)
+  const predStd   = safeNum(result.prediction_std)
+  const lowBound  = aiPredictedValue * (1 - mape / 100)
+  const highBound = aiPredictedValue * (1 + mape / 100)
+  const stdLow    = aiPredictedValue - predStd
+  const stdHigh   = aiPredictedValue + predStd
+
+  // ── Export ───────────────────────────────────────────────────────────────
+  const handleExport = () => {
+    const rows = discoveryData.map((d) => `${d.name},${d.value},${d.kind}`)
+    const csv  = ["feature,value,kind", ...rows].join("\n")
+    const blob = new Blob([csv], { type: "text/csv" })
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement("a")
+    a.href = url; a.download = "price_discovery.csv"; a.click()
+    URL.revokeObjectURL(url)
+  }
 
   const salesVelocity = result.market_dynamics?.sales_velocity
   const marketStatus  = parseMarketLabel(salesVelocity?.market_label ?? "")
   const daysToSell    = safeNum(salesVelocity?.expected_days_to_sell, 0)
-  const sentimentRaw  = safeNum(result.market_sentiment_monthly, 0)
-  const sentimentPct  = (sentimentRaw * 100).toFixed(1)
-  const sentimentPos  = sentimentRaw >= 0
   const marketCycle   = result.market_dynamics?.temporal_analysis?.market_cycle ?? "—"
-
-  const radarData = useMemo(() => {
-    const lb    = (result.leaderboard ?? []).slice(0, 5)
-    const maxR2 = Math.max(...lb.map((m) => safeNum(m.r2)), 0.001)
-    return lb.map((m) => ({
-      model:     m.name.replace(/Regressor|Regression/gi, "").replace("Random Forest", "RF").replace("Gradient Boosting", "GBM").trim(),
-      agreement: maxR2 > 0 ? Math.round((safeNum(m.r2) / maxR2) * 100) : 0,
-      r2:        safeNum(m.r2),
-    }))
-  }, [result.leaderboard])
-
-  const avgR2 = useMemo(() => {
-    if (!result.leaderboard?.length) return 0
-    return result.leaderboard.reduce((s, m) => s + safeNum(m.r2), 0) / result.leaderboard.length
-  }, [result.leaderboard])
 
   const feats = useMemo(() => {
     const fi  = result.feature_importance ?? []
     const top = fi.slice(0, 7)
     const max = Math.max(...top.map((f) => safeNum(f.importance)), 0.001)
     return top.map((f) => ({
-      name: f.feature.replace(/_/g, " "),
-      pct:  Math.round((safeNum(f.importance) / max) * 100),
+      name:     f.feature.replace(/_/g, " "),
+      pct:      Math.round((safeNum(f.importance) / max) * 100),
+      positive: safeNum(result.correlation_lookup?.[f.feature], 0) >= 0,
     }))
-  }, [result.feature_importance])
+  }, [result.feature_importance, result.correlation_lookup])
 
   const buySignals  = result.arbitrage?.buy_signals  ?? []
   const riskSignals = result.arbitrage?.risk_signals ?? []
   const visibleBuy  = showAllSignals ? buySignals  : buySignals.slice(0, 3)
   const visibleRisk = showAllSignals ? riskSignals : riskSignals.slice(0, 3)
 
-  const strategyHtml = buildStrategy(result)
   const strategyTasks = (() => {
     const candidateCount = buySignals.length
     const riskCount = riskSignals.length
@@ -204,10 +198,10 @@ export function ValuationEngineTab({ result }: ValuationEngineTabProps) {
           </div>
           <div className="grid grid-cols-4 gap-6 shrink-0">
             {[
-              { label: "MAPE",       value: `${safeNum(result.mape).toFixed(1)}%`,                                      highlight: true, tip: "Mean Absolute Percentage Error on held-out test data. Lower is better." },
-              { label: "Confidence", value: `${safeNum(result.composite_confidence_score).toFixed(0)}%`,                 tip: "Composite AI confidence score across all models." },
-              { label: "Uplift",     value: positiveImpact > 0 ? `+${fmtK(positiveImpact)}` : "—",                      tip: "Total positive feature impact on predicted price." },
-              { label: "Time to Sell", value: daysToSell > 0 ? `${daysToSell}d` : "—",                                  tip: "Expected days to sell based on market velocity." },
+              { label: "MAPE",       value: `${mape.toFixed(1)}%`,                                       highlight: true, tip: "Mean Absolute Percentage Error on held-out test data. Lower is better." },
+              { label: "Confidence", value: `${safeNum(result.composite_confidence_score).toFixed(0)}%`,  tip: "Composite AI confidence score across all models." },
+              { label: "Uplift",     value: positiveImpact > 0 ? `+${fmtK(positiveImpact)}` : "—",        tip: "Total positive feature impact on predicted price." },
+              { label: "Time to Sell", value: daysToSell > 0 ? `${daysToSell}d` : "—",                    tip: "Expected days to sell based on market velocity." },
             ].map(({ label, value, highlight, tip }) => (
               <div key={label} className="text-center">
                 <p className="text-xs text-background/50 mb-1 flex items-center justify-center gap-0.5">
@@ -219,6 +213,101 @@ export function ValuationEngineTab({ result }: ValuationEngineTabProps) {
           </div>
         </div>
       </div>
+
+      {/* ── Price Discovery Waterfall ────────────────────────────────────────── */}
+      <Card className="border-0 shadow-sm">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-lg font-semibold flex items-center gap-1.5">
+                Price Discovery Waterfall
+                <InfoTip text="Starts from the market baseline (average price) and applies each feature's contribution one by one until reaching the final AI prediction. Green bars add value, red bars subtract it." />
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                How each property characteristic moves the price from baseline to final prediction
+              </p>
+            </div>
+            <button
+              onClick={handleExport}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-muted-foreground border border-border rounded-lg hover:bg-muted transition-colors"
+            >
+              <Download className="w-3.5 h-3.5" /> Export CSV
+            </button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {discoveryData.length > 0 ? (
+            <>
+              <div style={{ height: 460 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={discoveryData} margin={{ top: 28, right: 24, left: 12, bottom: 72 }}>
+                    <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="4 4" vertical={false} />
+                    <ReferenceLine y={0} stroke="hsl(var(--foreground))" strokeOpacity={0.25} strokeWidth={1.5} />
+                    <XAxis
+                      dataKey="name"
+                      tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
+                      axisLine={false}
+                      tickLine={false}
+                      interval={0}
+                      angle={-40}
+                      textAnchor="end"
+                      height={72}
+                    />
+                    <YAxis
+                      tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
+                      axisLine={false}
+                      tickLine={false}
+                      tickFormatter={fmtK}
+                      width={76}
+                    />
+                    <Tooltip content={<WaterfallTooltip />} cursor={{ fill: "hsl(var(--muted))", opacity: 0.4 }} />
+                    {connectors.map((line, i) => (
+                      <ReferenceLine
+                        key={i}
+                        segment={[{ x: line.from, y: line.y }, { x: line.to, y: line.y }]}
+                        stroke="hsl(var(--border))"
+                        strokeWidth={1.5}
+                        strokeDasharray="4 3"
+                      />
+                    ))}
+                    <Bar dataKey="value" radius={[5, 5, 0, 0]} maxBarSize={64}>
+                      {discoveryData.map((entry, i) => (
+                        <Cell key={i} fill={entry.fill} />
+                      ))}
+                      <LabelList
+                        dataKey="value"
+                        position="top"
+                        formatter={(value: number, _: string, item: { payload?: { kind?: string } }) => {
+                          if (item?.payload?.kind === "impact" && value > 0) return `+${fmtK(value)}`
+                          return fmtK(value)
+                        }}
+                        style={{ fill: "hsl(var(--foreground))", fontSize: 10, fontWeight: 700 }}
+                      />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="flex items-center justify-center gap-8 mt-2 pt-4 border-t border-border">
+                {[
+                  { color: "#94A3B8", label: "Baseline — average market price" },
+                  { color: "#10B981", label: "Uplift — feature adds value" },
+                  { color: "#EF4444", label: "Drag — feature reduces value" },
+                  { color: "#0F172A", label: "Final — AI prediction" },
+                ].map(({ color, label }) => (
+                  <span key={label} className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span className="w-3 h-3 rounded-sm shrink-0" style={{ background: color }} />
+                    {label}
+                  </span>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="flex items-center justify-center h-64 text-muted-foreground text-sm">
+              No price discovery data available
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* ── Strategy Snapshot ────────────────────────────────────────────────── */}
       <Card className="border-0 shadow-sm">
@@ -241,77 +330,110 @@ export function ValuationEngineTab({ result }: ValuationEngineTabProps) {
         </CardContent>
       </Card>
 
-      {/* ── Model Consensus + Feature Leverage ──────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card className="border-0 shadow-sm">
-          <CardHeader className="pb-4">
-            <CardTitle className="text-lg font-semibold">Model Consensus</CardTitle>
-            <p className="text-sm text-muted-foreground">Agreement across prediction algorithms</p>
-          </CardHeader>
-          <CardContent>
-            {radarData.length >= 3 ? (
-              <>
-                <div className="h-56">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <RadarChart data={radarData} cx="50%" cy="50%" outerRadius="70%">
-                      <PolarGrid stroke="hsl(var(--border))" />
-                      <PolarAngleAxis dataKey="model" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
-                      <Radar dataKey="agreement" stroke="hsl(var(--foreground))" fill="hsl(var(--foreground))" fillOpacity={0.08} strokeWidth={2} />
-                      <Tooltip
-                        contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }}
-                        formatter={(v: number) => [`${v}%`, "Agreement"]}
-                      />
-                    </RadarChart>
-                  </ResponsiveContainer>
-                </div>
-                <div className="mt-3 p-3 bg-muted/40 rounded-xl flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground font-medium">Average R²</span>
-                  <span className="text-sm font-semibold tabular-nums">{avgR2.toFixed(3)}</span>
-                </div>
-              </>
-            ) : (
-              <EmptyState label="Not enough models for consensus view." />
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="border-0 shadow-sm">
-          <CardHeader className="pb-4">
-            <CardTitle className="text-lg font-semibold flex items-center gap-1">
-              Feature Leverage
-              <InfoTip text="Which property attributes most influenced price predictions, derived from SHAP values." />
-            </CardTitle>
-            <p className="text-sm text-muted-foreground">Top price-driving characteristics</p>
-          </CardHeader>
-          <CardContent>
-            {feats.length > 0 ? (
-              <>
-                <div className="space-y-3">
-                  {feats.map((f) => (
-                    <div key={f.name}>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <span className="text-sm text-foreground truncate capitalize">{f.name}</span>
-                        <span className="text-xs font-semibold text-muted-foreground tabular-nums ml-3">{f.pct}%</span>
-                      </div>
-                      <div className="w-full bg-muted rounded-full h-1.5">
-                        <div
-                          className="h-full rounded-full bg-foreground transition-all duration-500"
-                          style={{ width: `${f.pct}%`, opacity: 0.15 + (f.pct / 100) * 0.85 }}
-                        />
-                      </div>
+      {/* ── Feature Leverage ─────────────────────────────────────────────────── */}
+      <Card className="border-0 shadow-sm">
+        <CardHeader className="pb-4">
+          <CardTitle className="text-lg font-semibold flex items-center gap-1">
+            Feature Leverage
+            <InfoTip text="Which property attributes most influenced price predictions (model feature importance). Green means the feature correlates with higher prices, red with lower prices." />
+          </CardTitle>
+          <p className="text-sm text-muted-foreground">Top price-driving characteristics</p>
+        </CardHeader>
+        <CardContent>
+          {feats.length > 0 ? (
+            <>
+              <div className="space-y-3">
+                {feats.map((f) => (
+                  <div key={f.name}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-sm text-foreground truncate capitalize">{f.name}</span>
+                      <span className={`text-xs font-semibold tabular-nums ml-3 ${f.positive ? "text-emerald-600" : "text-red-500"}`}>
+                        {f.positive ? "+" : "−"}{f.pct}%
+                      </span>
                     </div>
-                  ))}
+                    <div className="w-full bg-muted rounded-full h-1.5">
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${f.positive ? "bg-emerald-500" : "bg-red-500"}`}
+                        style={{ width: `${f.pct}%`, opacity: 0.35 + (f.pct / 100) * 0.65 }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground mt-5 pt-4 border-t border-border">
+                Showing {feats.length} of {result.feature_importance?.length ?? 0} features · color shows direction (green = raises price, red = lowers it)
+              </p>
+            </>
+          ) : (
+            <EmptyState label="No feature importance data available." />
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── Price Confidence Range ───────────────────────────────────────────── */}
+      <Card className="border-0 shadow-sm">
+        <CardHeader>
+          <CardTitle className="text-lg font-semibold flex items-center gap-1.5">
+            <Activity className="w-4 h-4 text-muted-foreground" />
+            Price Confidence Range
+            <InfoTip text="The realistic price window around the AI prediction, derived from model error rates and prediction variance." />
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {aiPredictedValue > 0 ? (
+            <>
+              <div className="relative h-16 mb-6 flex items-center">
+                <div className="absolute inset-x-0 h-2 bg-muted rounded-full" />
+                <div
+                  className="absolute h-4 bg-emerald-100 rounded-full border border-emerald-200"
+                  style={{ left: `${((lowBound / highBound) * 0.15) * 100}%`, right: "5%" }}
+                />
+                <div className="absolute left-1/2 -translate-x-1/2 flex flex-col items-center gap-1">
+                  <div className="w-0.5 h-8 bg-foreground" />
+                  <span className="text-xs font-bold text-foreground tabular-nums">{fmt(aiPredictedValue)}</span>
                 </div>
-                <p className="text-xs text-muted-foreground mt-5 pt-4 border-t border-border">
-                  Showing {feats.length} of {result.feature_importance?.length ?? 0} features
-                </p>
-              </>
-            ) : (
-              <EmptyState label="No feature importance data available." />
-            )}
-          </CardContent>
-        </Card>
-      </div>
+                <span className="absolute left-0 top-6 text-xs text-muted-foreground tabular-nums">{fmt(lowBound)}</span>
+                <span className="absolute right-0 top-6 text-xs text-muted-foreground tabular-nums text-right">{fmt(highBound)}</span>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between py-3 border-b border-border">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">MAPE-based range</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">±{mape.toFixed(1)}% from prediction</p>
+                  </div>
+                  <p className="text-sm font-semibold tabular-nums text-foreground">
+                    {fmt(lowBound)} – {fmt(highBound)}
+                  </p>
+                </div>
+                {predStd > 0 && (
+                  <div className="flex items-center justify-between py-3 border-b border-border">
+                    <div>
+                      <p className="text-sm font-medium text-foreground">1σ prediction band</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">±${Math.round(predStd).toLocaleString()} std deviation</p>
+                    </div>
+                    <p className="text-sm font-semibold tabular-nums text-foreground">
+                      {fmt(stdLow)} – {fmt(stdHigh)}
+                    </p>
+                  </div>
+                )}
+                <div className="flex items-center justify-between py-3">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Net price movement</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">AI prediction vs baseline</p>
+                  </div>
+                  <p className={`text-sm font-semibold tabular-nums ${aiPredictedValue >= baselineValue ? "text-emerald-600" : "text-red-500"}`}>
+                    {aiPredictedValue >= baselineValue ? "+" : ""}{fmt(aiPredictedValue - baselineValue)}
+                    {" "}({((aiPredictedValue - baselineValue) / baselineValue * 100).toFixed(1)}%)
+                  </p>
+                </div>
+              </div>
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">No prediction data available.</p>
+          )}
+        </CardContent>
+      </Card>
 
       {/* ── Valuation Signals ────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -383,34 +505,6 @@ export function ValuationEngineTab({ result }: ValuationEngineTabProps) {
           </CardContent>
         </Card>
       </div>
-
-      {/* ── Strategy Recommendation ──────────────────────────────────────────── */}
-      <Card className="border-0 shadow-sm">
-        <CardHeader className="pb-4">
-          <div className="flex items-center gap-3">
-            <Lightbulb className="w-4 h-4 text-muted-foreground" />
-            <div>
-              <CardTitle className="text-lg font-semibold">Strategy Recommendation</CardTitle>
-              <p className="text-sm text-muted-foreground mt-0.5">AI-generated market intelligence based on current dataset</p>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground leading-relaxed" dangerouslySetInnerHTML={{ __html: strategyHtml }} />
-          <div className="mt-5 grid grid-cols-3 gap-3 pt-5 border-t border-border">
-            {[
-              { icon: <BookOpen className="w-3 h-3" />, label: "Winning Model",      value: result.winner ?? "—" },
-              { icon: <Activity className="w-3 h-3" />,  label: "Confidence Score",  value: `${safeNum(result.composite_confidence_score).toFixed(0)}%`, green: true },
-              { icon: <Target className="w-3 h-3" />,    label: "Flagged Properties", value: `${(result.arbitrage?.buy_signals?.length ?? 0) + (result.arbitrage?.risk_signals?.length ?? 0)}` },
-            ].map(({ icon, label, value, green }) => (
-              <div key={label} className="bg-muted/40 rounded-xl p-3">
-                <div className="flex items-center gap-1.5 text-muted-foreground text-xs mb-1.5">{icon}{label}</div>
-                <p className={`text-sm font-semibold truncate ${green ? "text-emerald-600" : "text-foreground"}`}>{value}</p>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
 
     </div>
   )

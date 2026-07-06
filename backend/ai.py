@@ -10,6 +10,8 @@ from pydantic import BaseModel
 # ─── Groq Client ───────────────────────────────────────────────────────────────
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+# Overridable so a Groq model deprecation is an env change, not a redeploy.
+GROQ_MODEL   = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 _groq_client = None
 
 
@@ -33,7 +35,7 @@ def groq_json(prompt: str) -> str:
     if not client:
         raise RuntimeError("GROQ_API_KEY not configured.")
     response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
+        model=GROQ_MODEL,
         messages=[{"role": "user", "content": prompt}],
         temperature=0.1,
         response_format={"type": "json_object"},
@@ -47,7 +49,7 @@ def groq_text(prompt: str) -> str:
     if not client:
         raise RuntimeError("GROQ_API_KEY not configured.")
     response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
+        model=GROQ_MODEL,
         messages=[{"role": "user", "content": prompt}],
         temperature=0.4,
     )

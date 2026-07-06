@@ -77,22 +77,6 @@ init_users_db()
 
 # ─── Pydantic Models ───────────────────────────────────────────────────────────
 
-class ScenarioSimulationRequest(BaseModel):
-    base_valuation:          float = Field(..., gt=0, lt=1_000_000_000)
-    slider_value:            float = Field(..., ge=0, le=100)
-    market_cycle:            Optional[str] = Field(None, max_length=50)
-    renovation_package:      str   = Field("basic", pattern=r"^(basic|midrange|luxury|structural)$")
-    forecast_horizon_months: int   = Field(12, ge=1, le=240)
-
-
-class ScenarioSimulationResponse(BaseModel):
-    adjustedValuation:  float
-    conditionImpact:    str
-    renovationCost:     float
-    expectedValueGain:  float
-    projectedProfit:    float
-
-
 class PredictRequest(BaseModel):
     sq_ft_total:     float          = Field(..., gt=0, lt=100_000)
     bedrooms:        Optional[float] = Field(None, ge=0, le=100)
@@ -241,48 +225,6 @@ async def predict_single(job_id: str, payload: PredictRequest, _user: dict = Dep
     debug_inputs = {col: row[col] for col in features
                    if not any(col.startswith(p) for p in ("Zip_Code_", "Property_Type_"))}
     return {"predicted_price": round(prediction, 2), "debug_inputs": debug_inputs}
-
-
-# ─── Market Scenario Simulation ────────────────────────────────────────────────
-
-@app.post("/simulate-scenario", response_model=ScenarioSimulationResponse)
-async def simulate_scenario(payload: ScenarioSimulationRequest, _user: dict = Depends(get_current_user)):
-    normalized = (payload.slider_value - 50.0) / 50.0
-    cycle      = (payload.market_cycle or "").lower()
-    package    = (payload.renovation_package or "basic").lower()
-    months     = int(payload.forecast_horizon_months or 12)
-
-    cycle_mult = 1.15 if ("hot" in cycle or "seller" in cycle) else (0.9 if ("cold" in cycle or "buyer" in cycle) else 1.0)
-
-    packages = {
-        "basic":      {"label": "Basic Refresh",            "cost": 18_000.0,  "gain_pct": 0.05},
-        "midrange":   {"label": "Mid-Range Modernization",  "cost": 42_000.0,  "gain_pct": 0.09},
-        "luxury":     {"label": "Luxury Upgrade",           "cost": 95_000.0,  "gain_pct": 0.11},
-        "structural": {"label": "Structural Rehab",         "cost": 140_000.0, "gain_pct": 0.07},
-    }
-    selected     = packages.get(package, packages["basic"])
-    reno_cost    = float(selected["cost"])
-    value_gain   = float(payload.base_valuation * selected["gain_pct"])
-    profit       = float(value_gain - reno_cost)
-
-    horizon_factor = min(1.8, 1.0 + months / 120.0)
-    pct_shift      = normalized * 0.14 * cycle_mult * horizon_factor
-    adjusted       = max(0.0, payload.base_valuation * (1.0 + pct_shift) + profit)
-
-    direction    = "upside" if pct_shift >= 0 else "downside"
-    profitability = "profitable" if profit >= 0 else "unprofitable"
-
-    return ScenarioSimulationResponse(
-        adjustedValuation = float(adjusted),
-        conditionImpact   = (
-            f"Scenario indicates {direction} pressure of {abs(pct_shift) * 100:.1f}% "
-            f"over a {months}-month horizon. {selected['label']} package is {profitability} "
-            f"with net impact {profit:,.0f} USD."
-        ),
-        renovationCost    = reno_cost,
-        expectedValueGain = value_gain,
-        projectedProfit   = profit,
-    )
 
 
 # ─── AI Column Mapping ─────────────────────────────────────────────────────────

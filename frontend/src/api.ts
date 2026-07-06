@@ -19,7 +19,7 @@ api.interceptors.response.use(
     if (error.response?.status === 401 && typeof window !== 'undefined') {
       localStorage.removeItem('ev-token')
       localStorage.removeItem('ev-user')
-      window.location.href = '/login'
+      window.location.href = '/'
     }
     return Promise.reject(error)
   },
@@ -30,13 +30,13 @@ export const startTraining = async (
   target: string,
   horizon: number,
   columnMapping: object | null = null,
-): Promise<{ job_id: string; status: string }> => {
+): Promise<{ job_id?: string; status?: string; error?: string }> => {
   const formData = new FormData()
   formData.append('file', file)
   formData.append('target', target)
   formData.append('horizon', String(horizon))
   if (columnMapping) formData.append('column_mapping', JSON.stringify(columnMapping))
-  const response = await api.post<{ job_id: string; status: string }>('/train', formData)
+  const response = await api.post<{ job_id?: string; status?: string; error?: string }>('/train', formData)
   return response.data
 }
 
@@ -47,13 +47,22 @@ export const mapColumns = async (file: File): Promise<ColumnMappingResult> => {
   return response.data
 }
 
-export const getAiAdvice = async (payload: object): Promise<{ advice: string }> => {
-  const response = await api.post<{ advice: string }>('/ai-advice', payload)
+export const getAiAdvice = async (payload: object): Promise<{ advice?: string; error?: string }> => {
+  const response = await api.post<{ advice?: string; error?: string }>('/ai-advice', payload)
   return response.data
 }
 
-export const getMarketIntelligence = async (payload: object): Promise<{ analysis: string }> => {
-  const response = await api.post<{ analysis: string }>('/market-intelligence', payload)
+export interface MarketSignal {
+  name: string
+  lag_days: number
+  correlation: number
+  description: string
+}
+
+export const getMarketIntelligence = async (
+  payload: object,
+): Promise<{ signals?: MarketSignal[]; error?: string }> => {
+  const response = await api.post<{ signals?: MarketSignal[]; error?: string }>('/market-intelligence', payload)
   return response.data
 }
 
@@ -96,44 +105,14 @@ export const predictSingle = async (
   return response.data
 }
 
-interface SimulateScenarioParams {
-  baseValuation: number
-  sliderValue: number
-  marketCycle?: string
-  renovationPackage?: string
-  forecastHorizonMonths?: number
-}
-
-export const simulateMarketScenario = async ({
-  baseValuation,
-  sliderValue,
-  marketCycle,
-  renovationPackage,
-  forecastHorizonMonths,
-}: SimulateScenarioParams): Promise<{
-  adjustedValuation: number
-  conditionImpact: string
-  renovationCost: number
-  expectedValueGain: number
-  projectedProfit: number
-}> => {
-  const response = await api.post('/simulate-scenario', {
-    base_valuation: Number(baseValuation),
-    slider_value: Number(sliderValue),
-    market_cycle: marketCycle || null,
-    renovation_package: renovationPackage || 'basic',
-    forecast_horizon_months: Number(forecastHorizonMonths || 12),
-  })
-  return response.data
-}
-
 export const logout = (): void => {
   localStorage.removeItem('ev-token')
   localStorage.removeItem('ev-user')
-  window.location.href = '/login'
+  window.location.href = '/'
 }
 
-export const getStoredUser = (): { username: string; role: string } | null => {
+// Shape stored by the login modal — mirrors backend auth.py's login response.
+export const getStoredUser = (): { id?: number; name: string; email: string; role: string } | null => {
   if (typeof window === 'undefined') return null
   try {
     return JSON.parse(localStorage.getItem('ev-user') || 'null')

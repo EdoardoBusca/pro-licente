@@ -6,48 +6,49 @@ interface HeroProps {
   onEnterDashboard: () => void;
 }
 
-const FRAME_COUNT = 60;
+const FRAME_COUNT = 74;
 const FRAME_PATH  = (i: number) =>
-  `/poza/video site_${String(i).padStart(3, "0")}.jpg`;
+  `/incercare3/ezgif-frame-${String(i + 1).padStart(3, "0")}.png`;
 
 const PHASES = [
   {
     id: "phase-1",
     start: 0,
-    end: 17,
-    pill: "AI-Powered",
-    heading: "See the market\nclearly.",
-    body: "VantagePoint turns raw property data into actionable intelligence — pricing, cash flow, and market trends in one place.",
+    end: 22,
+    pill: "Step 1: Ingest",
+    heading: "See the whole\npicture.",
+    body: "VantagePoint unifies raw property data, cash flows, and market trends into a single, clean dashboard.",
     cta: false,
   },
   {
     id: "phase-2",
-    start: 18,
-    end: 39,
-    pill: "Predictive Analytics",
-    heading: "Know the value\nbefore you buy.",
-    body: "Our AI models train on your own dataset and surface the hidden signals that drive real estate prices.",
+    start: 23,
+    end: 54,
+    pill: "Step 2: Train",
+    heading: "Predict future\nvaluations.",
+    body: "Run our AI models against your unique data to expose the hidden signals driving local real estate prices.",
     cta: false,
   },
   {
     id: "phase-3",
-    start: 40,
-    end: 59,
-    pill: "Ready to invest?",
-    heading: "Your edge\nstarts here.",
-    body: "Upload a dataset, train a model, and start making smarter real estate decisions in minutes.",
+    start: 50,
+    end: 73,
+    pill: "Step 3: Profit",
+    heading: "Invest with\nconviction.",
+    body: "Upload your dataset, train your custom AI, and start finding underpriced deals in minutes.",
     cta: true,
   },
 ];
 
 export function Hero({ onEnterDashboard }: HeroProps) {
-  const canvasRef      = useRef<HTMLCanvasElement>(null);
-  const imagesRef      = useRef<HTMLImageElement[]>([]);
-  const frameRef       = useRef(0);
-  const rafRef         = useRef(false);
-  const phaseRefs      = useRef<(HTMLDivElement | null)[]>([]);
+  const canvasRef       = useRef<HTMLCanvasElement>(null);
+  const imagesRef       = useRef<HTMLImageElement[]>([]);
+  const frameRef        = useRef(0);       // current displayed frame (integer)
+  const smoothRef       = useRef(0);       // floating lerp target
+  const rafRef          = useRef(false);   // rAF loop running
+  const phaseRefs       = useRef<(HTMLDivElement | null)[]>([]);
   const progressFillRef = useRef<HTMLDivElement>(null);
-  const scrollHintRef  = useRef<HTMLDivElement>(null);
+  const scrollHintRef   = useRef<HTMLDivElement>(null);
 
   // ── Draw one frame with object-fit: cover ──────────────────────────────────
   // Coordinates are in logical (CSS) pixels; the context transform handles dpr.
@@ -100,13 +101,20 @@ export function Hero({ onEnterDashboard }: HeroProps) {
     drawFrame(frameRef.current);
   }, [drawFrame]);
 
-  // ── Render tick ─────────────────────────────────────────────────────────────
+  // ── Render loop — lerp smoothing at 60fps ──────────────────────────────────
+  // `smoothRef` holds the floating frame position; each tick it eases toward
+  // the scroll-mapped target. The displayed integer frame only redraws when it
+  // actually changes, keeping GPU work minimal.
   const render = useCallback(() => {
-    rafRef.current = false;
     const scrollTop    = window.scrollY;
     const scrollHeight = document.documentElement.scrollHeight - window.innerHeight;
     const progress     = Math.min(Math.max(scrollTop / scrollHeight, 0), 1);
-    const frameIndex   = Math.min(Math.round(progress * (FRAME_COUNT - 1)), FRAME_COUNT - 1);
+    const target       = progress * (FRAME_COUNT - 1);
+
+    // Ease factor: 0.12 = smooth but responsive; raise toward 1 for snappier feel
+    smoothRef.current += (target - smoothRef.current) * 0.12;
+
+    const frameIndex = Math.min(Math.round(smoothRef.current), FRAME_COUNT - 1);
 
     if (frameIndex !== frameRef.current) {
       frameRef.current = frameIndex;
@@ -120,6 +128,13 @@ export function Hero({ onEnterDashboard }: HeroProps) {
     }
     if (scrollHintRef.current) {
       scrollHintRef.current.style.opacity = scrollTop > 40 ? "0" : "1";
+    }
+
+    // Keep the loop alive while still catching up to target
+    if (Math.abs(target - smoothRef.current) > 0.01) {
+      requestAnimationFrame(render);
+    } else {
+      rafRef.current = false;
     }
   }, [drawFrame, updatePhases]);
 

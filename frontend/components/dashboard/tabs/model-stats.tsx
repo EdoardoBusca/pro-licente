@@ -1,5 +1,6 @@
 "use client"
 
+import { useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -7,10 +8,12 @@ import {
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, ReferenceLine, Legend, Cell,
+  RadarChart, PolarGrid, PolarAngleAxis, Radar,
 } from "recharts"
-import { Trophy, Database, GitBranch, Layers, TrendingUp, CheckCircle2 } from "lucide-react"
+import { Trophy, Database, GitBranch, Layers, TrendingUp, CheckCircle2, Target } from "lucide-react"
 import type { TrainingResult } from "@/src/types"
 import { InfoTip } from "@/components/ui/info-tip"
+import { fmt, safeNum } from "@/lib/format"
 
 interface ModelStatsTabProps {
   result: TrainingResult
@@ -25,8 +28,21 @@ export function ModelStatsTab({ result }: ModelStatsTabProps) {
   const projectedData  = (result.full_chart_data ?? []).filter((p) => !p.is_historical)
   const pivotDay       = projectedData[0]?.day
 
-  // Residuals histogram
-  const residualBuckets = buildResidualBuckets(result.residuals ?? [])
+  const rs = result.model_diagnostics?.residual_stats
+
+  const radarData = useMemo(() => {
+    const lb    = (result.leaderboard ?? []).slice(0, 5)
+    const maxR2 = Math.max(...lb.map((m) => safeNum(m.r2)), 0.001)
+    return lb.map((m) => ({
+      model:     m.name.replace(/Regressor|Regression/gi, "").replace("Random Forest", "RF").replace("Gradient Boosting", "GBM").trim(),
+      agreement: maxR2 > 0 ? Math.round((safeNum(m.r2) / maxR2) * 100) : 0,
+    }))
+  }, [result.leaderboard])
+
+  const avgR2 = useMemo(() => {
+    if (!result.leaderboard?.length) return 0
+    return result.leaderboard.reduce((s, m) => s + safeNum(m.r2), 0) / result.leaderboard.length
+  }, [result.leaderboard])
 
   return (
     <div className="space-y-6">
@@ -123,24 +139,41 @@ export function ModelStatsTab({ result }: ModelStatsTabProps) {
         </Card>
       )}
 
-      {/* Residuals Histogram */}
-      {result.residuals && result.residuals.length > 0 && (
-        <Card className="border-0 shadow-sm">
-          <CardHeader className="pb-4">
-            <CardTitle className="text-lg font-semibold flex items-center">Prediction Error Spread<InfoTip text="Distribution of prediction errors (predicted minus actual). A tight bell curve centered at $0 means unbiased predictions with no systematic over- or under-valuation." /></CardTitle>
-            <p className="text-sm text-muted-foreground">How errors are distributed — tighter and centered on $0 is better</p>
+      {/* Prediction Error Distribution */}
+      {rs && (
+        <Card className="border-0 shadow-sm overflow-hidden">
+          <CardHeader>
+            <CardTitle className="text-lg font-semibold flex items-center gap-1.5">
+              Prediction Error Distribution
+              <InfoTip text="Statistics about how far off the model's predictions were on held-out test data. A median near $0 means the model has no systematic bias." />
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">
+              How prediction errors were distributed across the test set
+            </p>
           </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={residualBuckets} margin={{ top: 4, right: 8, bottom: 4, left: 8 }}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                <XAxis dataKey="label" tick={{ fontSize: 10 }} interval={2} />
-                <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
-                <Tooltip formatter={(v: number) => [v, "Count"]} labelFormatter={(l: string) => `Error: ${l}`} />
-                <ReferenceLine x="$0K" stroke="#10B981" strokeDasharray="4 2" />
-                <Bar dataKey="count" fill="hsl(var(--foreground))" opacity={0.75} radius={[3, 3, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+          <CardContent className="p-0">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 divide-x divide-y md:divide-y-0 divide-border">
+              {[
+                { label: "Mean error",    value: fmt(safeNum(rs.mean)),   sub: "Expected bias",      color: Math.abs(safeNum(rs.mean)) < safeNum(result.mae) * 0.1 ? "text-emerald-600" : "text-red-500" },
+                { label: "Median error",  value: fmt(safeNum(rs.median)), sub: "Typical prediction", color: "text-foreground" },
+                { label: "Std deviation", value: fmt(safeNum(rs.std)),    sub: "Spread of errors",   color: "text-foreground" },
+                { label: "Q1 (25th pct)", value: fmt(safeNum(rs.q1)),     sub: "Lower quartile",     color: "text-foreground" },
+                { label: "Q3 (75th pct)", value: fmt(safeNum(rs.q3)),     sub: "Upper quartile",     color: "text-foreground" },
+                { label: "Error range",   value: `${fmt(safeNum(rs.min))} – ${fmt(safeNum(rs.max))}`, sub: "Min to max error", color: "text-foreground" },
+              ].map(({ label, value, sub, color }) => (
+                <div key={label} className="px-5 py-5">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide mb-2">{label}</p>
+                  <p className={`text-base font-semibold tabular-nums leading-tight ${color}`}>{value}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{sub}</p>
+                </div>
+              ))}
+            </div>
+            {Math.abs(safeNum(rs.mean)) < safeNum(result.mae) * 0.1 && (
+              <div className="px-6 py-3 border-t border-border bg-emerald-50/50 flex items-center gap-2 text-xs text-emerald-700">
+                <TrendingUp className="w-3.5 h-3.5 shrink-0" />
+                Mean error is near zero — the model shows no significant systematic bias.
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -206,6 +239,42 @@ export function ModelStatsTab({ result }: ModelStatsTabProps) {
         )
       })()}
 
+      {/* Model Consensus */}
+      <Card className="border-0 shadow-sm">
+        <CardHeader className="pb-4">
+          <CardTitle className="text-lg font-semibold">Model Consensus</CardTitle>
+          <p className="text-sm text-muted-foreground">Agreement across prediction algorithms</p>
+        </CardHeader>
+        <CardContent>
+          {radarData.length >= 3 ? (
+            <>
+              <div className="h-56">
+                <ResponsiveContainer width="100%" height="100%">
+                  <RadarChart data={radarData} cx="50%" cy="50%" outerRadius="70%">
+                    <PolarGrid stroke="hsl(var(--border))" />
+                    <PolarAngleAxis dataKey="model" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
+                    <Radar dataKey="agreement" stroke="hsl(var(--foreground))" fill="hsl(var(--foreground))" fillOpacity={0.08} strokeWidth={2} />
+                    <Tooltip
+                      contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }}
+                      formatter={(v: number) => [`${v}%`, "Agreement"]}
+                    />
+                  </RadarChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="mt-3 p-3 bg-muted/40 rounded-xl flex items-center justify-between">
+                <span className="text-xs text-muted-foreground font-medium">Average R²</span>
+                <span className="text-sm font-semibold tabular-nums">{avgR2.toFixed(3)}</span>
+              </div>
+            </>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-10 gap-2 text-center">
+              <Target className="w-5 h-5 text-muted-foreground/30" />
+              <p className="text-sm text-muted-foreground">Not enough models for consensus view.</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Leaderboard */}
       <Card className="border-0 shadow-sm">
         <CardHeader className="pb-4">
@@ -255,22 +324,6 @@ export function ModelStatsTab({ result }: ModelStatsTabProps) {
       </Card>
     </div>
   )
-}
-
-function buildResidualBuckets(residuals: number[]): { label: string; count: number }[] {
-  if (!residuals.length) return []
-  const BINS = 18
-  const min  = residuals.reduce((a, b) => (b < a ? b : a), residuals[0])
-  const max  = residuals.reduce((a, b) => (b > a ? b : a), residuals[0])
-  const step = (max - min) / BINS || 1
-  return Array.from({ length: BINS }, (_, i) => {
-    const lo = min + i * step
-    const hi = lo + step
-    return {
-      label: `$${(lo / 1000).toFixed(0)}K`,
-      count: residuals.filter((r) => r >= lo && (i === BINS - 1 ? r <= hi : r < hi)).length,
-    }
-  })
 }
 
 function MetricBadge({ label, value, highlight = false, tip }: { label: string; value: string; highlight?: boolean; tip?: string }) {

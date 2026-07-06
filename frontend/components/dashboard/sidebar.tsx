@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
+import { motion } from "framer-motion"
 import {
   Upload, FileSpreadsheet, Check, Sparkles, X,
   Loader2, Wand2, LogOut, User, ShieldCheck, ChevronRight,
@@ -126,20 +127,33 @@ export function Sidebar({
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
               className={`
-                block rounded-xl border-2 border-dashed px-5 py-6 text-center cursor-pointer
-                transition-all duration-200
+                relative block rounded-xl border-2 border-dashed px-5 py-6 text-center cursor-pointer
+                overflow-hidden transition-all duration-200
                 ${isDragging
-                  ? "border-foreground bg-muted/50 scale-[1.01]"
+                  ? "border-emerald-500 bg-emerald-500/[0.04] scale-[1.01]"
                   : "border-border hover:border-foreground/30 hover:bg-muted/20"
                 }
               `}
             >
+              {isDragging && (
+                <motion.div
+                  className="pointer-events-none absolute inset-0"
+                  initial={{ backgroundPositionX: "0%" }}
+                  animate={{ backgroundPositionX: "200%" }}
+                  transition={{ duration: 1.6, repeat: Infinity, ease: "linear" }}
+                  style={{
+                    backgroundImage:
+                      "linear-gradient(100deg, transparent 30%, rgba(16,185,129,0.16) 50%, transparent 70%)",
+                    backgroundSize: "200% 100%",
+                  }}
+                />
+              )}
               <input type="file" accept=".csv,.xlsx" onChange={handleFileInput} className="hidden" />
-              <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center mx-auto mb-3">
-                <Upload className="w-4 h-4 text-muted-foreground" />
+              <div className="relative w-9 h-9 rounded-lg bg-muted flex items-center justify-center mx-auto mb-3">
+                <Upload className={`w-4 h-4 ${isDragging ? "text-emerald-600" : "text-muted-foreground"}`} />
               </div>
-              <p className="text-sm font-medium text-foreground">Drop your dataset</p>
-              <p className="text-[11px] text-muted-foreground mt-1">CSV or XLSX · click to browse</p>
+              <p className="relative text-sm font-medium text-foreground">Drop your dataset</p>
+              <p className="relative text-[11px] text-muted-foreground mt-1">CSV or XLSX · click to browse</p>
             </label>
           )}
         </section>
@@ -231,7 +245,14 @@ export function Sidebar({
         ) : (
           <Button
             onClick={onInitialize}
-            className="w-full h-11 rounded-xl gap-2 group"
+            className={`
+              relative w-full h-11 rounded-xl gap-2 group overflow-hidden
+              transition-all duration-300
+              ${canInitialize
+                ? "bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-500 bg-[length:200%_100%] hover:bg-[position:100%_0] text-white shadow-[0_0_0_1px_rgba(16,185,129,0.3),0_4px_16px_-4px_rgba(16,185,129,0.5)]"
+                : "opacity-60 saturate-0"
+              }
+            `}
             disabled={!canInitialize}
           >
             {isTraining ? (

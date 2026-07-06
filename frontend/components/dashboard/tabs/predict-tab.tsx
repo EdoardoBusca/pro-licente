@@ -8,14 +8,12 @@ import { Label } from "@/components/ui/label"
 import { Loader2, Home, CheckCircle2, Search, TableProperties, PenLine, TrendingUp, TrendingDown, Minus } from "lucide-react"
 import { predictSingle } from "@/src/api"
 import type { TrainingResult, PropertyRow } from "@/src/types"
+import { fmt } from "@/lib/format"
 
 interface PredictTabProps {
   jobId: string
   result: TrainingResult
 }
-
-const fmt = (n: number) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n)
 
 export function PredictTab({ jobId, result }: PredictTabProps) {
   const [mode, setMode]         = useState<"dataset" | "manual">("dataset")

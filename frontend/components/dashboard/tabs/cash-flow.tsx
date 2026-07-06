@@ -10,20 +10,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { InfoTip } from "@/components/ui/info-tip"
 import type { TrainingResult } from "@/src/types"
 import { calcMortgage, calcRemainingBalance, calcIRR, getDefaultPrice, getDefaultAppreciation } from "@/src/finance"
+import { fmt, fmtK, fmtPct } from "@/lib/format"
 
 interface CashFlowTabProps {
   result: TrainingResult
-}
-
-const fmt = (n: number) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n)
-
-const fmtPct = (n: number, d = 2) => `${n.toFixed(d)}%`
-
-const fmtK = (n: number) => {
-  if (Math.abs(n) >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`
-  if (Math.abs(n) >= 1_000) return `$${(n / 1_000).toFixed(0)}K`
-  return `$${Math.round(n)}`
 }
 
 interface ProjectionRow {

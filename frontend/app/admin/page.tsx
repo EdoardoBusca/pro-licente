@@ -48,7 +48,7 @@ export default function AdminPage() {
 
   const fetchUsers = useCallback(async () => {
     const res = await fetch(`${API}/auth/users`, { headers: authHeaders() })
-    if (res.status === 401) { router.replace("/login"); return }
+    if (res.status === 401) { router.replace("/"); return }
     if (res.status === 403) { router.replace("/"); return }
     setUsers(await res.json())
     setLoading(false)
@@ -56,7 +56,7 @@ export default function AdminPage() {
 
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem("ev-user") || "null")
-    if (!user) { router.replace("/login"); return }
+    if (!user) { router.replace("/"); return }
     if (user.role !== "admin") { router.replace("/"); return }
     fetchUsers()
   }, [fetchUsers, router])
