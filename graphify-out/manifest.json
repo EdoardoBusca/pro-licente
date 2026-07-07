@@ -10,8 +10,8 @@
     "semantic_hash": ""
   },
   "backend/catboost_info/catboost_training.json": {
-    "mtime": 1783088312.830215,
-    "ast_hash": "00167a4d6bdd5ba2bdbda79c37fb7b31",
+    "mtime": 1783434338.977949,
+    "ast_hash": "4304774ef290f7f9b9959eca6a425da5",
     "semantic_hash": ""
   },
   "backend/data.py": {
@@ -30,8 +30,8 @@
     "semantic_hash": ""
   },
   "backend/engine/analytics.py": {
-    "mtime": 1777491678.1938043,
-    "ast_hash": "dbd5be0d40b889cd2e193a88efd1facc",
+    "mtime": 1783365452.3489082,
+    "ast_hash": "95a077d8e21651b49445d6c817ea1d9d",
     "semantic_hash": ""
   },
   "backend/engine/market.py": {
@@ -55,8 +55,8 @@
     "semantic_hash": ""
   },
   "backend/main.py": {
-    "mtime": 1783085626.054864,
-    "ast_hash": "db6441624d25dec04a72ce912b47d463",
+    "mtime": 1783433628.2709384,
+    "ast_hash": "0ca79a502f2f6896aae519e6d4e673e8",
     "semantic_hash": ""
   },
   "convert-dataset.py": {
@@ -75,8 +75,8 @@
     "semantic_hash": ""
   },
   "frontend/app/page.tsx": {
-    "mtime": 1783027248.492552,
-    "ast_hash": "e339b301a140456f87cdf7a0d5af8d26",
+    "mtime": 1783435146.400586,
+    "ast_hash": "2a98b9f07d5e66bfef29eef343150b77",
     "semantic_hash": ""
   },
   "frontend/components.json": {
@@ -109,14 +109,9 @@
     "ast_hash": "59a1b4365bf6b115bed1c992bbc25c5f",
     "semantic_hash": ""
   },
-  "frontend/components/dashboard/tabs/cash-flow.tsx": {
-    "mtime": 1783085001.4875133,
-    "ast_hash": "0b051bc7df95c588f4bb5a3d3a59b7a0",
-    "semantic_hash": ""
-  },
   "frontend/components/dashboard/tabs/investment-calculator.tsx": {
-    "mtime": 1783085001.4886584,
-    "ast_hash": "097bc8fe42e3b5b7a51dd206790af839",
+    "mtime": 1783435320.4842837,
+    "ast_hash": "e22ca2ec9ecbe93b6d2453398d9132cc",
     "semantic_hash": ""
   },
   "frontend/components/dashboard/tabs/market-dynamics.tsx": {
@@ -135,8 +130,8 @@
     "semantic_hash": ""
   },
   "frontend/components/dashboard/tabs/predict-tab.tsx": {
-    "mtime": 1783085001.489693,
-    "ast_hash": "7080f9a4ad796eac116e47155c656936",
+    "mtime": 1783433748.9232159,
+    "ast_hash": "7f70a04cdc7b325e7028046ada8e9e4e",
     "semantic_hash": ""
   },
   "frontend/components/dashboard/tabs/valuation-engine.tsx": {
@@ -145,8 +140,8 @@
     "semantic_hash": ""
   },
   "frontend/components/landing/hero.tsx": {
-    "mtime": 1783088928.3569562,
-    "ast_hash": "70de3f9644ffac2d7c7fbc6662a4358f",
+    "mtime": 1783166553.2450652,
+    "ast_hash": "72027358d64e3f5ff450541ceab711a3",
     "semantic_hash": ""
   },
   "frontend/components/landing/loading-transition.tsx": {
@@ -679,9 +674,9 @@
     "ast_hash": "677a8a8992ebdce65a44e571cad1f440",
     "semantic_hash": ""
   },
-  "incercare3/ezgif-frame-001.png": {
-    "mtime": 1783083446.0656688,
-    "ast_hash": "21b1e54b8624bcd2e79f75b494960eaa",
+  "incercare3/ezgif-frame-001.jpeg": {
+    "mtime": 1783005744.3351305,
+    "ast_hash": "8a387b0633cea20cb2e3c4ffb9531d40",
     "semantic_hash": ""
   },
   "incercare3/ezgif-frame-002.png": {

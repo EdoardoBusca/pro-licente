@@ -14,7 +14,6 @@ import { MarketDynamicsTab } from "@/components/dashboard/tabs/market-dynamics"
 import { MarketInventoryTab } from "@/components/dashboard/tabs/market-inventory"
 import { PredictTab } from "@/components/dashboard/tabs/predict-tab"
 import { InvestmentCalculatorTab } from "@/components/dashboard/tabs/investment-calculator"
-import { CashFlowTab } from "@/components/dashboard/tabs/cash-flow"
 import { ColumnMapper } from "@/components/dashboard/column-mapper"
 import { AiAdvicePanel } from "@/components/dashboard/ai-advice-panel"
 import {
@@ -413,7 +412,6 @@ export default function App() {
                 { value: "market-inventory",      label: "Market Inventory",    icon: <Building2 className="w-4 h-4" /> },
                 { value: "predict",                label: "Predict",            icon: <Home className="w-4 h-4" /> },
                 { value: "investment-calculator", label: "Investment",         icon: <Calculator className="w-4 h-4" /> },
-                { value: "cash-flow",             label: "Cash Flow",          icon: <TrendingUp className="w-4 h-4" /> },
                 { value: "model-stats",           label: "Model Report",      icon: <BarChart3 className="w-4 h-4" /> },
               ]}
             />
@@ -454,13 +452,6 @@ export default function App() {
               </FadeUp>
             </TabsContent>
 
-            <TabsContent value="cash-flow" className="mt-0">
-              <FadeUp active={activeTab === "cash-flow"}>
-                {result
-                  ? <CashFlowTab result={result} />
-                  : <LockedState icon={<TrendingUp className="w-6 h-6" />} label="Cash Flow & Returns" />}
-              </FadeUp>
-            </TabsContent>
 
             <TabsContent value="model-stats" className="mt-0">
               <FadeUp active={activeTab === "model-stats"}>

@@ -84,8 +84,10 @@ export function PredictTab({ jobId, result }: PredictTabProps) {
     }
   }
 
-  const delta = prediction != null && selected
-    ? ((prediction - selected.actual_price) / selected.actual_price) * 100
+  // Compare against the training-time AI value for this row (both are model
+  // outputs, so the gap only reflects features the form doesn't capture).
+  const delta = prediction != null && selected && selected.ai_value
+    ? ((prediction - selected.ai_value) / selected.ai_value) * 100
     : null
 
   return (
@@ -156,7 +158,7 @@ export function PredictTab({ jobId, result }: PredictTabProps) {
                 <table className="w-full text-sm">
                   <thead className="sticky top-0 bg-muted/90 backdrop-blur-sm">
                     <tr>
-                      {["#", "Sq Ft", "Beds", "Baths", "Cond.", "Zip Code", "Type", "Actual Price", "AI Value"].map((h) => (
+                      {["#", "Sq Ft", "Beds", "Baths", "Cond.", "Zip Code", "Type", "AI Value"].map((h) => (
                         <th key={h} className="py-2.5 px-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wide whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
@@ -179,16 +181,20 @@ export function PredictTab({ jobId, result }: PredictTabProps) {
                         <td className="py-2.5 px-4">{p.condition_score ?? "—"}</td>
                         <td className="py-2.5 px-4">{p.zip_code ?? "—"}</td>
                         <td className="py-2.5 px-4 max-w-[120px] truncate">{p.property_type ?? "—"}</td>
-                        <td className="py-2.5 px-4 font-mono">{fmt(p.actual_price)}</td>
                         <td className="py-2.5 px-4 font-mono text-estate-green">{fmt(p.ai_value)}</td>
                       </tr>
                     ))}
                     {filtered.length === 0 && (
-                      <tr><td colSpan={9} className="py-8 text-center text-muted-foreground">No properties found</td></tr>
+                      <tr><td colSpan={8} className="py-8 text-center text-muted-foreground">No properties found</td></tr>
                     )}
                   </tbody>
                 </table>
               </div>
+              {properties.length > filtered.length && (
+                <p className="px-4 py-2 text-xs text-muted-foreground border-t border-border bg-muted/30">
+                  Showing {filtered.length} of {properties.length} properties — use search to narrow down
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -275,17 +281,13 @@ export function PredictTab({ jobId, result }: PredictTabProps) {
                 </div>
 
                 {selected && (
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="p-4 rounded-xl bg-muted/40 text-center">
-                      <p className="text-xs text-muted-foreground mb-1">Actual Closing Price</p>
-                      <p className="text-lg font-semibold font-mono">{fmt(selected.actual_price)}</p>
-                    </div>
+                  <div className="grid grid-cols-2 gap-3">
                     <div className="p-4 rounded-xl bg-muted/40 text-center">
                       <p className="text-xs text-muted-foreground mb-1">Training AI Value</p>
                       <p className="text-lg font-semibold font-mono text-estate-green">{fmt(selected.ai_value)}</p>
                     </div>
                     <div className={`p-4 rounded-xl text-center ${delta != null && Math.abs(delta) <= result.mape ? "bg-estate-green/5 border border-estate-green/20" : "bg-muted/40"}`}>
-                      <p className="text-xs text-muted-foreground mb-1">Predicted vs Actual</p>
+                      <p className="text-xs text-muted-foreground mb-1">vs Training AI Value</p>
                       <div className="flex items-center justify-center gap-1">
                         {delta != null && delta > 0 ? <TrendingUp className="w-4 h-4 text-estate-green" /> :
                          delta != null && delta < 0 ? <TrendingDown className="w-4 h-4 text-red-500" /> :
@@ -295,7 +297,7 @@ export function PredictTab({ jobId, result }: PredictTabProps) {
                         </p>
                       </div>
                       {delta != null && Math.abs(delta) <= result.mape && (
-                        <p className="text-[10px] text-estate-green mt-1">Within model error range</p>
+                        <p className="text-[10px] text-estate-green mt-1">Consistent with training-time valuation</p>
                       )}
                     </div>
                   </div>

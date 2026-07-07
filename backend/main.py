@@ -200,7 +200,13 @@ async def predict_single(job_id: str, payload: PredictRequest, _user: dict = Dep
     scaler   = state["scaler"]
     features = state["features"]
 
-    row = {f: 0.0 for f in features}
+    # Start from the "average property": every feature at its training mean.
+    # A raw 0 for an unspecified field would mean "0 bedrooms, 0 sq ft, in no
+    # zip code" — far outside the training distribution and badly skewing the
+    # prediction. Mean imputation keeps unspecified fields neutral (scaled 0).
+    means = getattr(scaler, "mean_", None)
+    row = {f: (float(means[i]) if means is not None else 0.0) for i, f in enumerate(features)}
+
     numeric_map = {
         "sq_ft_total":   payload.sq_ft_total,
         "bedrooms":      payload.bedrooms,
@@ -213,10 +219,14 @@ async def predict_single(job_id: str, payload: PredictRequest, _user: dict = Dep
             if key in col_lower and val is not None:
                 row[col] = float(val)
 
-    if payload.zip_code and f"Zip_Code_{payload.zip_code}" in row:
-        row[f"Zip_Code_{payload.zip_code}"] = 1.0
-    if payload.property_type and f"Property_Type_{payload.property_type}" in row:
-        row[f"Property_Type_{payload.property_type}"] = 1.0
+    # One-hot groups: a known value makes the row a hard member of that category
+    # (chosen column 1, siblings 0). Unknown or absent values keep the mean
+    # encoding — an "average location / property-type mix".
+    for prefix, value in (("Zip_Code_", payload.zip_code), ("Property_Type_", payload.property_type)):
+        if value and f"{prefix}{value}" in row:
+            for col in features:
+                if col.startswith(prefix):
+                    row[col] = 1.0 if col == f"{prefix}{value}" else 0.0
 
     X_input  = pd.DataFrame([row], columns=features)
     X_scaled = scaler.transform(X_input)
